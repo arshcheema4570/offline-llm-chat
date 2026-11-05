@@ -143,30 +143,33 @@ document.getElementById('chatForm').addEventListener('submit', async (e) => {
   if (!text) return;
   inputEl.value = '';
   addMsg('user', text);
-  // Bonsai 2 is a thinking model (thinking ON by default). Disable it two ways:
-  // the /no_think chat-template switch (Qwen convention) and the API flag.
-  history.push({ role: 'user', content: text + ' /no_think' });
+  history.push({ role: 'user', content: text });
   generating = true;
   sendBtn.disabled = true;
   const outDiv = addMsg('assistant', '');
   const t0 = performance.now();
   let tokens = 0;
+  // NOTE: this model is a thinking model — it emits <think>...</think> blocks
+  // before answering, and the chat API hides that channel entirely (it came
+  // back empty in testing). So we use raw completion with a hand-built ChatML
+  // prompt and strip the think blocks ourselves. Verified against the model.
+  const prompt = history.map(m =>
+    `<|im_start|>${m.role}\n${m.content}<|im_end|>\n`
+  ).join('') + '<|im_start|>assistant\n';
+  const stripThink = (t) => t.replace(/<think>[\s\S]*?(<\/think>|$)/g, '').trimStart();
   try {
-    const stream = await wllama.createChatCompletion({
-      messages: history,
-      max_tokens: 256,
+    const stream = await wllama.createCompletion({
+      prompt,
+      max_tokens: 512,
       temperature: 0.7,
       stream: true,
-      enable_thinking: false,
     });
-    let reply = '';
+    let raw = '';
     for await (const chunk of stream) {
-      const delta = chunk.choices[0]?.delta ?? {};
-      // Render both normal and reasoning deltas — whatever the model emits
-      // becomes visible, so a thinking-only run can never look like silence.
-      const piece = (delta.content ?? '') + (delta.reasoning_content ?? '');
-      if (piece) { tokens++; reply += piece; outDiv.textContent = reply; chatEl.scrollTop = chatEl.scrollHeight; }
+      const piece = chunk.choices[0]?.text ?? '';
+      if (piece) { tokens++; raw += piece; outDiv.textContent = stripThink(raw); chatEl.scrollTop = chatEl.scrollHeight; }
     }
+    const reply = stripThink(raw);
     history.push({ role: 'assistant', content: reply });
     const secs = (performance.now() - t0) / 1000;
     const meta = document.createElement('div');
