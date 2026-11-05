@@ -64,8 +64,13 @@ window.addEventListener('error', (e) => {
 }, true);
 </script>
 <script type="module">
-import { Wllama, WLLAMA_CONFIG_PATHS } from 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.8.1/esm/index.js';
+import { Wllama } from 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.8.1/esm/index.js';
 window.__wllamaBooted = true;
+// wllama's wasm lives at this path in the published package (single wasm;
+// single- vs multi-thread is chosen at runtime based on COOP/COEP headers).
+const CONFIG_PATHS = {
+  default: 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.8.1/src/wasm/wllama.wasm',
+};
 
 const MODEL_URL = 'https://huggingface.co/prism-ml/Ternary-Bonsai-2-2B-gguf/resolve/main/Ternary-Bonsai-2-2B-Q2_0.gguf';
 const statusEl = document.getElementById('status');
@@ -104,7 +109,7 @@ loadBtn.addEventListener('click', async () => {
   setStatus('Loading Bonsai 2 2B on CPU (WASM)… first run downloads ~0.55 GB.');
   progressWrap.style.display = 'block';
   try {
-    wllama = new Wllama(WLLAMA_CONFIG_PATHS);
+    wllama = new Wllama(CONFIG_PATHS);
     await wllama.loadModelFromUrl(MODEL_URL, {
       n_threads: Math.max(1, navigator.hardwareConcurrency || 4),
       n_gpu_layers: 0, // WebGPU explicitly off — CPU/WASM only
