@@ -3,49 +3,78 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#111827">
+<meta name="theme-color" content="#173d2b">
 <title>Gemma 3 270M — Offline LLM Chat</title>
 <link rel="manifest" href="manifest.json">
 <style>
-  :root { color-scheme: light dark; }
+  /* Kheti family visual system: ink / cream / paper / gold */
+  :root {
+    --ink:#173d2b; --ink-2:#28533c; --cream:#f6f2e9; --paper:#fffdf8;
+    --gold:#e5a83b; --gold-soft:#f8e7b7; --line:#ded8c9; --muted:#6c766d;
+    --red:#a84e38; --shadow:0 16px 45px rgba(27,52,37,.12);
+    --btn:#173d2b; --user-bg:#173d2b; --input-bg:#fffefa; --track:var(--gold-soft);
+    --badge-bg:#dcead9; --badge-text:#28533c;
+    color-scheme: light dark;
+  }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #f3f4f6; color: #111827; display: flex; flex-direction: column; height: 100dvh; }
-  @media (prefers-color-scheme: dark) { body { background: #0f172a; color: #e5e7eb; } }
-  header { padding: 12px 16px; border-bottom: 1px solid #d1d5db; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  @media (prefers-color-scheme: dark) { header { border-color: #334155; } }
-  header h1 { font-size: 18px; margin: 0; flex: 1 1 auto; }
-  .badge { font-size: 12px; padding: 3px 8px; border-radius: 999px; background: #dcfce7; color: #166534; font-weight: 600; }
-  @media (prefers-color-scheme: dark) { .badge { background: #14532d; color: #bbf7d0; } }
-  .badge.warn { background: #fef3c7; color: #92400e; }
-  @media (prefers-color-scheme: dark) { .badge.warn { background: #78350f; color: #fde68a; } }
-  #status { font-size: 13px; padding: 8px 16px; min-height: 32px; }
-  #progressWrap { height: 6px; background: #e5e7eb; margin: 0 16px; border-radius: 3px; overflow: hidden; display: none; }
-  @media (prefers-color-scheme: dark) { #progressWrap { background: #334155; } }
-  #progressBar { height: 100%; width: 0%; background: #2563eb; transition: width .2s; }
+  body { margin: 0; background: var(--cream); color: var(--ink); font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.45; display: flex; flex-direction: column; height: 100dvh; }
+  header { padding: 14px 16px 10px; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .brand { display: flex; align-items: center; gap: 12px; flex: 1 1 auto; min-width: 220px; }
+  .mark { height: 43px; width: 43px; border-radius: 14px; background: var(--gold); display: grid; place-items: center; font-size: 23px; box-shadow: inset 0 -4px 0 rgba(0,0,0,.08); flex: 0 0 auto; }
+  .brand-text strong { display: block; font-family: Georgia, serif; font-size: 20px; letter-spacing: -.01em; }
+  .brand-text span { display: block; color: var(--muted); font-size: 12px; margin-top: 1px; }
+  .badge { font-size: 12px; padding: 3px 8px; border-radius: 999px; background: var(--badge-bg); color: var(--badge-text); font-weight: 600; white-space: nowrap; }
+  .badge.warn { background: var(--gold-soft); color: var(--ink-2); }
+  #status { font-size: 13px; padding: 8px 16px; min-height: 32px; color: var(--ink-2); }
+  #progressWrap { height: 6px; background: var(--track); margin: 0 16px; border-radius: 3px; overflow: hidden; display: none; }
+  #progressBar { height: 100%; width: 0%; background: var(--gold); transition: width .2s; }
+  #errorBox { display: none; margin: 4px 16px 0; padding: 12px 14px; background: var(--paper); border: 1px solid var(--line); border-left: 3px solid var(--red); border-radius: 14px; font-size: 13px; line-height: 1.55; white-space: pre-wrap; color: var(--ink); box-shadow: 0 5px 18px rgba(27,52,37,.04); }
+  #retryRow { display: none; gap: 8px; padding: 10px 16px 0; flex-wrap: wrap; }
   #chat { flex: 1 1 auto; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-  .msg { max-width: 85%; padding: 10px 14px; border-radius: 14px; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word; font-size: 15px; }
-  .user { align-self: flex-end; background: #2563eb; color: #fff; border-bottom-right-radius: 4px; }
-  .assistant { align-self: flex-start; background: #e5e7eb; color: #111827; border-bottom-left-radius: 4px; }
-  @media (prefers-color-scheme: dark) { .assistant { background: #1e293b; color: #e5e7eb; } }
+  .msg { max-width: 85%; padding: 10px 14px; border-radius: 18px; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word; font-size: 15px; }
+  .user { align-self: flex-end; background: var(--user-bg); color: #f6f2e9; border-bottom-right-radius: 4px; }
+  .assistant { align-self: flex-start; background: var(--paper); color: var(--ink); border: 1px solid var(--line); border-bottom-left-radius: 4px; box-shadow: 0 5px 18px rgba(27,52,37,.04); }
   .meta { font-size: 12px; opacity: .65; margin-top: 4px; }
-  form { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid #d1d5db; }
-  @media (prefers-color-scheme: dark) { form { border-color: #334155; } }
-  input[type=text] { flex: 1 1 auto; font-size: 16px; padding: 10px 12px; border-radius: 10px; border: 1px solid #d1d5db; background: inherit; color: inherit; }
-  button { font-size: 15px; padding: 10px 16px; border-radius: 10px; border: 0; background: #2563eb; color: #fff; cursor: pointer; }
+  form { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
+  input[type=text] { flex: 1 1 auto; font-size: 16px; padding: 10px 12px; border-radius: 11px; border: 1px solid var(--line); background: var(--input-bg); color: var(--ink); outline: none; }
+  input[type=text]:focus { border-color: var(--ink-2); box-shadow: 0 0 0 3px rgba(40,83,60,.15); }
+  button { font-size: 15px; padding: 10px 16px; border-radius: 12px; border: 0; background: var(--btn); color: #fff; cursor: pointer; font-weight: 700; }
   button:disabled { opacity: .5; cursor: default; }
-  #loadBtn { background: #059669; }
-  footer { font-size: 12px; opacity: .65; padding: 0 16px 10px; }
+  #loadBtn { background: var(--gold); color: var(--ink); }
+  #retryBtn { background: var(--btn); color: #fff; }
+  #clearBtn { background: var(--gold-soft); color: var(--ink); }
+  footer { font-size: 12px; color: var(--muted); padding: 0 16px 10px; }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --cream:#122019; --paper:#1a2b21; --ink:#e8efe9; --ink-2:#b9d2bd;
+      --line:#2c4636; --muted:#9db3a4; --user-bg:#28533c; --input-bg:#16241c;
+      --track:#2c4636; --badge-bg:#234434; --badge-text:#cfe6d2;
+    }
+    .badge.warn { background: #4a3a17; color: #f8e7b7; }
+    #clearBtn { background: #4a3a17; color: #f8e7b7; }
+  }
 </style>
 </head>
 <body>
 <header>
-  <h1>Gemma 3 270M — Offline Chat</h1>
+  <div class="brand">
+    <div class="mark">💬</div>
+    <div class="brand-text">
+      <strong>Gemma 3 270M — Offline Chat</strong>
+      <span>Runs on your device · no server, no WebGPU</span>
+    </div>
+  </div>
   <span class="badge">CPU only (WASM)</span>
   <span class="badge warn" id="offlineBadge">Online — first run</span>
   <button id="loadBtn">Download model</button>
 </header>
 <div id="status">Model not loaded. Tap “Download model” — one-time download (~0.25 GB), then it runs fully offline.</div>
 <div id="progressWrap"><div id="progressBar"></div></div>
+<div id="errorBox"></div>
+<div id="retryRow">
+  <button id="retryBtn" type="button">Retry download</button>
+  <button id="clearBtn" type="button">Clear cached model &amp; retry</button>
+</div>
 <main id="chat"></main>
 <form id="chatForm">
   <input id="input" type="text" placeholder="Ask anything…" autocomplete="off" disabled>
@@ -73,9 +102,14 @@ const CONFIG_PATHS = {
 };
 
 const MODEL_URL = 'https://huggingface.co/unsloth/gemma-3-270m-it-GGUF/resolve/main/gemma-3-270m-it-Q4_K_M.gguf';
+const MODEL_FILE = MODEL_URL.split('/').pop();
 const statusEl = document.getElementById('status');
 const progressWrap = document.getElementById('progressWrap');
 const progressBar = document.getElementById('progressBar');
+const errorBox = document.getElementById('errorBox');
+const retryRow = document.getElementById('retryRow');
+const retryBtn = document.getElementById('retryBtn');
+const clearBtn = document.getElementById('clearBtn');
 const chatEl = document.getElementById('chat');
 const inputEl = document.getElementById('input');
 const sendBtn = document.getElementById('sendBtn');
@@ -83,10 +117,18 @@ const loadBtn = document.getElementById('loadBtn');
 const offlineBadge = document.getElementById('offlineBadge');
 
 let wllama = null;
+let loading = false;
 let generating = false;
 const history = [{ role: 'system', content: 'You are a helpful assistant. Keep answers concise.' }];
 
+// Load-attempt diagnostics: wllama's progress callback is the only window
+// into the ~0.25 GB download, so remember the last numbers it reported.
+let lastLoaded = 0;
+let lastTotal = 0;
+let loadStage = 'starting';
+
 function setStatus(t) { statusEl.textContent = t; }
+function fmtMB(n) { return (n / 1048576).toFixed(0) + ' MB'; }
 function addMsg(role, text) {
   const div = document.createElement('div');
   div.className = 'msg ' + role;
@@ -103,11 +145,53 @@ if (!navigator.onLine) { offlineBadge.textContent = 'Offline mode'; }
 window.addEventListener('online', () => { offlineBadge.textContent = 'Online — first run'; });
 window.addEventListener('offline', () => { offlineBadge.textContent = 'Offline mode'; });
 
-loadBtn.addEventListener('click', async () => {
-  if (wllama) return;
+// wllama 3.8.1 caches the model in OPFS under root 'cache/', keyed as
+// SHA-1(url)_filename, plus a '__metadata__' + key file. A download that
+// dies part-way leaves a partial file behind; wiping both entries forces
+// a clean re-download instead of reusing the broken copy.
+async function sha1Hex(str) {
+  const buf = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(str));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+async function clearModelCache() {
+  if (!navigator.storage || !navigator.storage.getDirectory) {
+    return 'This browser has no OPFS model cache to clear.';
+  }
+  const root = await navigator.storage.getDirectory();
+  try {
+    await root.removeEntry('cache', { recursive: true });
+    return 'Model cache cleared (whole wllama cache folder removed).';
+  } catch (e) {
+    // Fallback: delete just this model's two entries.
+    try {
+      const fileKey = (await sha1Hex(MODEL_URL)) + '_' + MODEL_FILE;
+      const dir = await root.getDirectoryHandle('cache');
+      const removed = [];
+      for (const k of [fileKey, '__metadata__' + fileKey]) {
+        try { await dir.removeEntry(k); removed.push(k); } catch (_) { /* not present */ }
+      }
+      return removed.length
+        ? 'Cleared cached model file(s).'
+        : 'Nothing cached to clear (' + (e && e.message ? e.message : e) + ').';
+    } catch (e2) {
+      return 'Could not clear the cache: ' + (e2 && e2.message ? e2.message : e2);
+    }
+  }
+}
+
+async function loadModel() {
+  if (wllama || loading) return;
+  loading = true;
+  loadStage = 'starting';
+  lastLoaded = 0;
+  lastTotal = 0;
+  errorBox.style.display = 'none';
+  retryRow.style.display = 'none';
   loadBtn.disabled = true;
+  loadBtn.textContent = 'Downloading…';
   setStatus('Loading Gemma 3 270M on CPU (WASM)… first run downloads ~0.25 GB.');
   progressWrap.style.display = 'block';
+  progressBar.style.width = '0%';
   try {
     wllama = new Wllama(CONFIG_PATHS);
     await wllama.loadModelFromUrl(MODEL_URL, {
@@ -115,8 +199,13 @@ loadBtn.addEventListener('click', async () => {
       n_gpu_layers: 0, // WebGPU explicitly off — CPU/WASM only
       useCache: true,
       progressCallback: ({ loaded, total }) => {
+        lastLoaded = loaded || 0;
+        lastTotal = total || 0;
         if (total) {
           const pct = Math.round((loaded / total) * 100);
+          loadStage = pct >= 100
+            ? 'initializing (download done, loading into memory)'
+            : 'downloading';
           progressBar.style.width = pct + '%';
           setStatus(`Downloading model — ${pct}%`);
         }
@@ -130,10 +219,58 @@ loadBtn.addEventListener('click', async () => {
     loadBtn.textContent = 'Model loaded';
     inputEl.focus();
   } catch (err) {
-    console.error(err);
-    setStatus('Failed to load model: ' + (err && err.message ? err.message : err));
+    // The old code left `wllama` assigned after a failure, which made the
+    // Download button a no-op (its handler returned early). Reset it so
+    // Retry actually retries.
+    wllama = null;
+    console.error('Model load failed', { stage: loadStage, loaded: lastLoaded, total: lastTotal, online: navigator.onLine, err });
+    const errName = (err && err.name) || 'Error';
+    const errMsg = (err && err.message) || String(err);
+    const pct = lastTotal ? Math.round((lastLoaded / lastTotal) * 100) : 0;
+    const bytesLine = lastTotal
+      ? `Downloaded: ${fmtMB(lastLoaded)} of ${fmtMB(lastTotal)} (${pct}%)`
+      : (lastLoaded ? `Downloaded: ${fmtMB(lastLoaded)} (total size unknown)` : 'Downloaded: nothing arrived');
+    let hint;
+    if (lastLoaded > 0 && lastTotal && lastLoaded < lastTotal) {
+      hint = 'What this means: the download stopped part-way — the connection dropped before the 0.25 GB file finished. The model file itself is fine; this is the mobile network. Tap “Retry download” — it starts again from the beginning, so Wi-Fi or a stronger signal helps.';
+    } else if (lastLoaded >= lastTotal && lastTotal > 0) {
+      hint = 'What this means: the download finished, but the model would not start in memory — the saved copy may be damaged. Tap “Clear cached model & retry”: it wipes the saved copy and downloads fresh.';
+    } else {
+      hint = 'What this means: nothing arrived from the model host — check your connection and tap “Retry download”. If it keeps failing at 0%, tap “Clear cached model & retry”.';
+    }
+    setStatus('Failed to load model.');
+    errorBox.textContent =
+      'Couldn’t load the model\n' +
+      'Stage: ' + loadStage + '\n' +
+      'Error: ' + errName + ': ' + errMsg + '\n' +
+      bytesLine + '\n' +
+      'Connection: ' + (navigator.onLine ? 'online' : 'offline (no connection)') + '\n' +
+      hint;
+    errorBox.style.display = 'block';
+    retryRow.style.display = 'flex';
     loadBtn.disabled = false;
+    loadBtn.textContent = 'Retry download';
+  } finally {
+    loading = false;
   }
+}
+
+loadBtn.addEventListener('click', loadModel);
+retryBtn.addEventListener('click', loadModel);
+clearBtn.addEventListener('click', async () => {
+  if (loading) return;
+  retryBtn.disabled = true;
+  clearBtn.disabled = true;
+  setStatus('Clearing cached model…');
+  try {
+    const result = await clearModelCache();
+    setStatus(result + ' Retrying download…');
+  } catch (e) {
+    setStatus('Could not clear the cache: ' + (e && e.message ? e.message : e) + ' Retrying anyway…');
+  }
+  retryBtn.disabled = false;
+  clearBtn.disabled = false;
+  loadModel();
 });
 
 document.getElementById('chatForm').addEventListener('submit', async (e) => {
