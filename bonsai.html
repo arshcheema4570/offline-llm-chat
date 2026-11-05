@@ -53,8 +53,19 @@
 </form>
 <footer>Model: Ternary-Bonsai-2-2B-Q2_0 (same ternary weights as the 1-bit PTQ1_0 file, 2-bit packing — the packing that runs on stock llama.cpp) · Runtime: wllama (llama.cpp compiled to WASM), n_gpu_layers: 0 — WebGPU explicitly off · Model caches in your browser; after the first download, no internet is needed.</footer>
 
+<script>
+// Surface module-load failures (e.g. a dead CDN import) in the status line
+// instead of leaving the Download button silently dead.
+window.addEventListener('error', (e) => {
+  if (e.target === window && /import|module|wllama/i.test(e.message || '')) {
+    const s = document.getElementById('status');
+    if (s && !window.__wllamaBooted) s.textContent = 'Failed to load the wllama runtime: ' + e.message;
+  }
+}, true);
+</script>
 <script type="module">
-import { Wllama, WLLAMA_CONFIG_PATHS } from 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.8.1/+esm';
+import { Wllama, WLLAMA_CONFIG_PATHS } from 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.8.1/esm/index.js';
+window.__wllamaBooted = true;
 
 const MODEL_URL = 'https://huggingface.co/prism-ml/Ternary-Bonsai-2-2B-gguf/resolve/main/Ternary-Bonsai-2-2B-Q2_0.gguf';
 const statusEl = document.getElementById('status');
