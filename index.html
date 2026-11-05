@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#111827">
-<title>Offline LLM Chat</title>
+<title>SmolLM2 1.7B — Offline LLM Chat</title>
 <link rel="manifest" href="manifest.json">
 <style>
   :root { color-scheme: light dark; }
@@ -39,24 +39,40 @@
 </head>
 <body>
 <header>
-  <h1>Offline LLM Chat</h1>
-  <span class="badge" id="backendBadge">CPU only (WASM)</span>
+  <h1>SmolLM2 1.7B — Offline Chat</h1>
+  <span class="badge">CPU only (WASM)</span>
   <span class="badge warn" id="offlineBadge">Online — first run</span>
   <button id="loadBtn">Download model</button>
 </header>
-<div id="status">Model not loaded. Tap “Download model” — one-time download (~786 MB), then it runs fully offline.</div>
+<div id="status">Model not loaded. Tap “Download model” — one-time download (~1.0 GB), then it runs fully offline.</div>
 <div id="progressWrap"><div id="progressBar"></div></div>
 <main id="chat"></main>
 <form id="chatForm">
   <input id="input" type="text" placeholder="Ask anything…" autocomplete="off" disabled>
   <button id="sendBtn" type="submit" disabled>Send</button>
 </form>
-<footer>Model: Qwen2.5-0.5B-Instruct (q4) · Runtime: Transformers.js, WASM backend — WebGPU is never used · Model files cache in your browser; after the first download, no internet is needed.</footer>
+<footer>Model: SmolLM2-1.7B-Instruct Q4_K_M (~1.0 GB) · Runtime: wllama (llama.cpp compiled to WASM), n_gpu_layers: 0 — WebGPU explicitly off · Model caches in your browser; after the first download, no internet is needed.</footer>
 
+<script>
+// Surface module-load failures (e.g. a dead CDN import) in the status line
+// instead of leaving the Download button silently dead.
+window.addEventListener('error', (e) => {
+  if (e.target === window && /import|module|wllama/i.test(e.message || '')) {
+    const s = document.getElementById('status');
+    if (s && !window.__wllamaBooted) s.textContent = 'Failed to load the wllama runtime: ' + e.message;
+  }
+}, true);
+</script>
 <script type="module">
-import { pipeline, env, TextStreamer } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.0/+esm';
+import { Wllama } from 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.8.1/esm/index.js';
+window.__wllamaBooted = true;
+// wllama's wasm lives at this path in the published package (single wasm;
+// single- vs multi-thread is chosen at runtime based on COOP/COEP headers).
+const CONFIG_PATHS = {
+  default: 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.8.1/src/wasm/wllama.wasm',
+};
 
-const MODEL_ID = 'onnx-community/Qwen2.5-0.5B-Instruct';
+const MODEL_URL = 'https://huggingface.co/HuggingFaceTB/SmolLM2-1.7B-Instruct-GGUF/resolve/main/smollm2-1.7b-instruct-q4_k_m.gguf';
 const statusEl = document.getElementById('status');
 const progressWrap = document.getElementById('progressWrap');
 const progressBar = document.getElementById('progressBar');
@@ -66,7 +82,7 @@ const sendBtn = document.getElementById('sendBtn');
 const loadBtn = document.getElementById('loadBtn');
 const offlineBadge = document.getElementById('offlineBadge');
 
-let generator = null;
+let wllama = null;
 let generating = false;
 const history = [{ role: 'system', content: 'You are a helpful assistant. Keep answers concise.' }];
 
@@ -79,16 +95,6 @@ function addMsg(role, text) {
   chatEl.scrollTop = chatEl.scrollHeight;
   return div;
 }
-function progressCallback(info) {
-  if (info.status === 'progress') {
-    progressWrap.style.display = 'block';
-    const pct = info.total ? Math.round((info.loaded / info.total) * 100) : 0;
-    progressBar.style.width = pct + '%';
-    setStatus(`Downloading ${info.file} — ${pct}%`);
-  } else if (info.status === 'done') {
-    progressBar.style.width = '100%';
-  }
-}
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
@@ -98,19 +104,26 @@ window.addEventListener('online', () => { offlineBadge.textContent = 'Online —
 window.addEventListener('offline', () => { offlineBadge.textContent = 'Offline mode'; });
 
 loadBtn.addEventListener('click', async () => {
-  if (generator) return;
+  if (wllama) return;
   loadBtn.disabled = true;
-  setStatus('Loading model on CPU (WASM)… this takes a while on first run.');
+  setStatus('Loading SmolLM2 1.7B on CPU (WASM)… first run downloads ~1.0 GB.');
+  progressWrap.style.display = 'block';
   try {
-    // Force the WASM backend: WebGPU is never attempted.
-    env.backends.onnx.wasm.numThreads = Math.max(1, (navigator.hardwareConcurrency || 4) - 1);
-    generator = await pipeline('text-generation', MODEL_ID, {
-      device: 'wasm',
-      dtype: 'q4',
-      progress_callback: progressCallback,
+    wllama = new Wllama(CONFIG_PATHS);
+    await wllama.loadModelFromUrl(MODEL_URL, {
+      n_threads: Math.max(1, navigator.hardwareConcurrency || 4),
+      n_gpu_layers: 0, // WebGPU explicitly off — CPU/WASM only
+      useCache: true,
+      progressCallback: ({ loaded, total }) => {
+        if (total) {
+          const pct = Math.round((loaded / total) * 100);
+          progressBar.style.width = pct + '%';
+          setStatus(`Downloading model — ${pct}%`);
+        }
+      },
     });
     progressWrap.style.display = 'none';
-    setStatus('Model ready — running fully on CPU (WASM). No WebGPU, no server.');
+    setStatus('Model ready — SmolLM2 1.7B running fully on CPU (WASM). No WebGPU, no server.');
     offlineBadge.textContent = 'Ready — works offline';
     inputEl.disabled = false;
     sendBtn.disabled = false;
@@ -125,7 +138,7 @@ loadBtn.addEventListener('click', async () => {
 
 document.getElementById('chatForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  if (!generator || generating) return;
+  if (!wllama || generating) return;
   const text = inputEl.value.trim();
   if (!text) return;
   inputEl.value = '';
@@ -136,23 +149,24 @@ document.getElementById('chatForm').addEventListener('submit', async (e) => {
   const outDiv = addMsg('assistant', '');
   const t0 = performance.now();
   let tokens = 0;
+  // Raw completion with a hand-built ChatML prompt (SmolLM2's native format).
+  // This avoids any chat-template channel quirks in the runtime's chat API.
+  const prompt = history.map(m =>
+    `<|im_start|>${m.role}\n${m.content}<|im_end|>\n`
+  ).join('') + '<|im_start|>assistant\n';
   try {
-    const streamer = new TextStreamer(generator.tokenizer, {
-      skip_prompt: true,
-      callback_function: (chunk) => {
-        tokens++;
-        outDiv.textContent += chunk;
-        chatEl.scrollTop = chatEl.scrollHeight;
-      },
-    });
-    const output = await generator(history, {
-      max_new_tokens: 256,
+    const stream = await wllama.createCompletion({
+      prompt,
+      max_tokens: 512,
       temperature: 0.7,
-      do_sample: true,
-      streamer,
+      stream: true,
     });
-    const reply = output[0].generated_text.at(-1).content;
-    history.push({ role: 'assistant', content: reply });
+    let raw = '';
+    for await (const chunk of stream) {
+      const piece = chunk.choices[0]?.text ?? '';
+      if (piece) { tokens++; raw += piece; outDiv.textContent = raw; chatEl.scrollTop = chatEl.scrollHeight; }
+    }
+    history.push({ role: 'assistant', content: raw });
     const secs = (performance.now() - t0) / 1000;
     const meta = document.createElement('div');
     meta.className = 'meta';

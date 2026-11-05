@@ -1,8 +1,8 @@
 // Service worker: app shell + JS/WASM cached for offline use; pages are
 // network-first so redeploys always reach the user. Model files from
 // Hugging Face are NOT touched here — the ML runtimes own their caches.
-const CACHE = 'offline-llm-v3';
-const SHELL = ['./', './index.html', './bonsai.html', './manifest.json'];
+const CACHE = 'offline-llm-v4';
+const SHELL = ['./', './index.html', './manifest.json'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
