@@ -1,0 +1,1 @@
+{"background_color":"#111827","description":"On-device LLM chat that runs on CPU (WASM) — no WebGPU, no server, works offline after the first model download.","display":"standalone","name":"Offline LLM Chat","short_name":"LLM Chat","start_url":"./index.html","theme_color":"#111827"}
