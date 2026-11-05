@@ -72,7 +72,8 @@ const CONFIG_PATHS = {
   default: 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.8.1/src/wasm/wllama.wasm',
 };
 
-const MODEL_URL = 'https://huggingface.co/prism-ml/Ternary-Bonsai-2-2B-gguf/resolve/main/Ternary-Bonsai-2-2B-Q2_0.gguf';
+const MODEL_URL = 'https://huggingface.co/prism-ml/Ternary-Bonsai-2-2B-gguf/resolve/main/Ternary-Bonsai-2-2B-Q2_0.gguf?cachebust=v3';
+// (query param busts stale/corrupt runtime caches keyed by URL)
 const statusEl = document.getElementById('status');
 const progressWrap = document.getElementById('progressWrap');
 const progressBar = document.getElementById('progressBar');
