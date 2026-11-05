@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#111827">
-<title>Bonsai 2 2B — Offline LLM Chat</title>
+<title>Bonsai 1.7B — Offline LLM Chat</title>
 <link rel="manifest" href="manifest.json">
 <style>
   :root { color-scheme: light dark; }
@@ -39,7 +39,7 @@
 </head>
 <body>
 <header>
-  <h1>Bonsai 2 2B — Offline Chat</h1>
+  <h1>Bonsai 1.7B — Offline Chat</h1>
   <span class="badge">CPU only (WASM)</span>
   <span class="badge warn" id="offlineBadge">Online — first run</span>
   <button id="loadBtn">Download model</button>
@@ -51,7 +51,7 @@
   <input id="input" type="text" placeholder="Ask anything…" autocomplete="off" disabled>
   <button id="sendBtn" type="submit" disabled>Send</button>
 </form>
-<footer>Model: Ternary-Bonsai-2-2B-Q2_0 (same ternary weights as the 1-bit PTQ1_0 file, 2-bit packing — the packing that runs on stock llama.cpp) · Runtime: wllama (llama.cpp compiled to WASM), n_gpu_layers: 0 — WebGPU explicitly off · Model caches in your browser; after the first download, no internet is needed.</footer>
+<footer>Model: Ternary-Bonsai-1.7B-Q2_0 (same ternary weights as the true 1-bit Q1_0 file, 2-bit packing — the true 1-bit needs PrismML's fork with CUDA/Metal kernels, so this is the packing that runs on CPU/WASM) · Runtime: wllama (llama.cpp compiled to WASM), n_gpu_layers: 0 — WebGPU explicitly off · Model caches in your browser; after the first download, no internet is needed.</footer>
 
 <script>
 // Surface module-load failures (e.g. a dead CDN import) in the status line
@@ -72,8 +72,7 @@ const CONFIG_PATHS = {
   default: 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.8.1/src/wasm/wllama.wasm',
 };
 
-const MODEL_URL = 'https://huggingface.co/prism-ml/Ternary-Bonsai-2-2B-gguf/resolve/main/Ternary-Bonsai-2-2B-Q2_0.gguf?cachebust=v3';
-// (query param busts stale/corrupt runtime caches keyed by URL)
+const MODEL_URL = 'https://huggingface.co/prism-ml/Ternary-Bonsai-1.7B-gguf/resolve/main/Ternary-Bonsai-1.7B-Q2_0.gguf';
 const statusEl = document.getElementById('status');
 const progressWrap = document.getElementById('progressWrap');
 const progressBar = document.getElementById('progressBar');
@@ -107,7 +106,7 @@ window.addEventListener('offline', () => { offlineBadge.textContent = 'Offline m
 loadBtn.addEventListener('click', async () => {
   if (wllama) return;
   loadBtn.disabled = true;
-  setStatus('Loading Bonsai 2 2B on CPU (WASM)… first run downloads ~0.55 GB.');
+  setStatus('Loading Bonsai 1.7B on CPU (WASM)… first run downloads ~0.42 GB.');
   progressWrap.style.display = 'block';
   try {
     wllama = new Wllama(CONFIG_PATHS);
@@ -124,7 +123,7 @@ loadBtn.addEventListener('click', async () => {
       },
     });
     progressWrap.style.display = 'none';
-    setStatus('Model ready — Bonsai 2 2B running fully on CPU (WASM). No WebGPU, no server.');
+    setStatus('Model ready — Bonsai 1.7B running fully on CPU (WASM). No WebGPU, no server.');
     offlineBadge.textContent = 'Ready — works offline';
     inputEl.disabled = false;
     sendBtn.disabled = false;
