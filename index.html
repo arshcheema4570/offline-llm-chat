@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#111827">
-<title>SmolLM2 1.7B — Offline LLM Chat</title>
+<title>Gemma 3 270M — Offline LLM Chat</title>
 <link rel="manifest" href="manifest.json">
 <style>
   :root { color-scheme: light dark; }
@@ -39,19 +39,19 @@
 </head>
 <body>
 <header>
-  <h1>SmolLM2 1.7B — Offline Chat</h1>
+  <h1>Gemma 3 270M — Offline Chat</h1>
   <span class="badge">CPU only (WASM)</span>
   <span class="badge warn" id="offlineBadge">Online — first run</span>
   <button id="loadBtn">Download model</button>
 </header>
-<div id="status">Model not loaded. Tap “Download model” — one-time download (~1.0 GB), then it runs fully offline.</div>
+<div id="status">Model not loaded. Tap “Download model” — one-time download (~0.25 GB), then it runs fully offline.</div>
 <div id="progressWrap"><div id="progressBar"></div></div>
 <main id="chat"></main>
 <form id="chatForm">
   <input id="input" type="text" placeholder="Ask anything…" autocomplete="off" disabled>
   <button id="sendBtn" type="submit" disabled>Send</button>
 </form>
-<footer>Model: SmolLM2-1.7B-Instruct Q4_K_M (~1.0 GB) · Runtime: wllama (llama.cpp compiled to WASM), n_gpu_layers: 0 — WebGPU explicitly off · Model caches in your browser; after the first download, no internet is needed.</footer>
+<footer>Model: Gemma 3 270M IT Q4_K_M (~0.25 GB) · Runtime: wllama (llama.cpp compiled to WASM), n_gpu_layers: 0 — WebGPU explicitly off · Model caches in your browser; after the first download, no internet is needed.</footer>
 
 <script>
 // Surface module-load failures (e.g. a dead CDN import) in the status line
@@ -72,7 +72,7 @@ const CONFIG_PATHS = {
   default: 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.8.1/src/wasm/wllama.wasm',
 };
 
-const MODEL_URL = 'https://huggingface.co/HuggingFaceTB/SmolLM2-1.7B-Instruct-GGUF/resolve/main/smollm2-1.7b-instruct-q4_k_m.gguf';
+const MODEL_URL = 'https://huggingface.co/unsloth/gemma-3-270m-it-GGUF/resolve/main/gemma-3-270m-it-Q4_K_M.gguf';
 const statusEl = document.getElementById('status');
 const progressWrap = document.getElementById('progressWrap');
 const progressBar = document.getElementById('progressBar');
@@ -106,7 +106,7 @@ window.addEventListener('offline', () => { offlineBadge.textContent = 'Offline m
 loadBtn.addEventListener('click', async () => {
   if (wllama) return;
   loadBtn.disabled = true;
-  setStatus('Loading SmolLM2 1.7B on CPU (WASM)… first run downloads ~1.0 GB.');
+  setStatus('Loading Gemma 3 270M on CPU (WASM)… first run downloads ~0.25 GB.');
   progressWrap.style.display = 'block';
   try {
     wllama = new Wllama(CONFIG_PATHS);
@@ -123,7 +123,7 @@ loadBtn.addEventListener('click', async () => {
       },
     });
     progressWrap.style.display = 'none';
-    setStatus('Model ready — SmolLM2 1.7B running fully on CPU (WASM). No WebGPU, no server.');
+    setStatus('Model ready — Gemma 3 270M running fully on CPU (WASM). No WebGPU, no server.');
     offlineBadge.textContent = 'Ready — works offline';
     inputEl.disabled = false;
     sendBtn.disabled = false;
@@ -149,11 +149,11 @@ document.getElementById('chatForm').addEventListener('submit', async (e) => {
   const outDiv = addMsg('assistant', '');
   const t0 = performance.now();
   let tokens = 0;
-  // Raw completion with a hand-built ChatML prompt (SmolLM2's native format).
+  // Raw completion with a hand-built prompt in Gemma's native format.
   // This avoids any chat-template channel quirks in the runtime's chat API.
   const prompt = history.map(m =>
-    `<|im_start|>${m.role}\n${m.content}<|im_end|>\n`
-  ).join('') + '<|im_start|>assistant\n';
+    `<start_of_turn>${m.role === 'assistant' ? 'model' : 'user'}\n${m.content}<end_of_turn>\n`
+  ).join('') + '<start_of_turn>model\n';
   try {
     const stream = await wllama.createCompletion({
       prompt,
