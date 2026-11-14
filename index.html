@@ -36,6 +36,10 @@
   .user { align-self: flex-end; background: var(--user-bg); color: #f6f2e9; border-bottom-right-radius: 4px; }
   .assistant { align-self: flex-start; background: var(--paper); color: var(--ink); border: 1px solid var(--line); border-bottom-left-radius: 4px; box-shadow: 0 5px 18px rgba(27,52,37,.04); }
   .meta { font-size: 12px; opacity: .65; margin-top: 4px; }
+  .msg-actions { margin-top: 8px; display: flex; gap: 8px; }
+  .speak-btn { font-size: 13px; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--gold-soft); color: var(--ink); font-weight: 600; cursor: pointer; }
+  .speak-btn:disabled { opacity: .55; cursor: default; }
+  .speak-btn.speaking { background: var(--gold); }
   form { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
   input[type=text] { flex: 1 1 auto; font-size: 16px; padding: 10px 12px; border-radius: 11px; border: 1px solid var(--line); background: var(--input-bg); color: var(--ink); outline: none; }
   input[type=text]:focus { border-color: var(--ink-2); box-shadow: 0 0 0 3px rgba(40,83,60,.15); }
@@ -81,7 +85,7 @@
   <input id="input" type="text" placeholder="Ask anything…" autocomplete="off" disabled>
   <button id="sendBtn" type="submit" disabled>Send</button>
 </form>
-<footer>Model: Gemma 3 270M IT Q4_K_M (~0.25 GB) · Runtime: wllama (llama.cpp compiled to WASM), n_gpu_layers: 0 — WebGPU explicitly off · Model caches in your browser; after the first download, no internet is needed.</footer>
+<footer>Model: Gemma 3 270M IT Q4_K_M (~0.25 GB) · Runtime: wllama (llama.cpp compiled to WASM), n_gpu_layers: 0 — WebGPU explicitly off · Model caches in your browser; after the first download, no internet is needed. · Read-aloud voice: Phonon 31M — tap 🔊 on a reply; the voice downloads once, then works offline.</footer>
 
 <script>
 // Surface module-load failures (e.g. a dead CDN import) in the status line
@@ -121,6 +125,126 @@ let wllama = null;
 let loading = false;
 let generating = false;
 const history = [{ role: 'system', content: 'You are a helpful assistant. Keep answers concise.' }];
+
+/* ---- Read aloud: Phonon 31M natural voice (vendored runtime) ---- */
+// Same engine as Mind Gym: PhononTTS.load downloads the voice once and
+// caches it in the Cache API ('phonon-tts-v1', origin-scoped, so the copy
+// Mind Gym already downloaded on this origin is reused — no re-download).
+// The runtime is vendored (./vendor/phonon-tts/) instead of a CDN import:
+// phonon-tts resolves its worker + wasm relative to its own files, and
+// same-origin keeps that resolution trivial. If Phonon fails to load, the
+// button falls back to the device voice so it always does something.
+let tts = null, phononVoice = null, phononFailed = false;
+let phononAudio = null, phononGain = null;
+let activeSources = [], lastEnd = 0;
+const ttsRate = 1;
+let speakingRun = null; // { cancelled, abort, btn }
+let speakSeq = 0; // bumped by stopSpeaking; a pending voice load checks it
+
+function ensurePhononAudio() {
+  if (!phononAudio) {
+    phononAudio = new (window.AudioContext || window.webkitAudioContext)();
+    phononGain = phononAudio.createGain(); phononGain.gain.value = 1;
+    phononGain.connect(phononAudio.destination);
+  }
+  if (phononAudio.state === 'suspended') phononAudio.resume();
+}
+
+async function loadPhonon() {
+  if (tts || phononFailed) return tts;
+  ensurePhononAudio();
+  setStatus('Preparing natural voice…');
+  try {
+    const { PhononTTS } = await import('./vendor/phonon-tts/index.js');
+    tts = await PhononTTS.load({ lang: 'en', device: 'auto', quant: 'q8',
+      onProgress: ({ loaded, total, cached }) => {
+        setStatus(cached ? 'Reading the local voice cache…'
+          : total ? `Preparing natural voice… ${Math.round((loaded / total) * 100)}%`
+          : `Preparing natural voice… ${Math.round(loaded / 1048576)} MB`);
+      } });
+    phononVoice = tts.voices[0];
+    setStatus(`Natural voice ready · ${tts.voices.length} voices · offline from now on`);
+    return tts;
+  } catch (e) {
+    console.error('Phonon load failed, falling back to device voice', e);
+    phononFailed = true;
+    setStatus('Natural voice unavailable — using the device voice instead.');
+    return null;
+  }
+}
+
+function speakDevice(text) {
+  return new Promise((resolve) => {
+    if (!('speechSynthesis' in window)) return resolve();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = ttsRate;
+    let done = false;
+    const fin = () => { if (!done) { done = true; resolve(); } };
+    u.onend = fin; u.onerror = fin;
+    setTimeout(fin, Math.max(3000, text.length * 95 / ttsRate + 2500));
+    try { speechSynthesis.speak(u); } catch (e) { fin(); }
+  });
+}
+
+async function speakPhonon(text, run) {
+  ensurePhononAudio();
+  const parts = text.match(/[^.!?]+[.!?]+["']?|\S[^.!?]*$/g)?.map((s) => s.trim()).filter(Boolean) || [text];
+  try {
+    for (const part of parts) {
+      if (run.cancelled) break;
+      const stream = tts.stream(part, { voice: phononVoice, signal: run.abort.signal });
+      let cursor = Math.max(phononAudio.currentTime, lastEnd);
+      for await (const pcm of stream) {
+        if (run.cancelled) break;
+        const buf = phononAudio.createBuffer(1, pcm.length, tts.sampleRate);
+        buf.getChannelData(0).set(pcm);
+        const src = phononAudio.createBufferSource();
+        src.buffer = buf; src.playbackRate.value = ttsRate; src.connect(phononGain);
+        activeSources.push(src);
+        src.onended = () => { const i = activeSources.indexOf(src); if (i >= 0) activeSources.splice(i, 1); };
+        cursor = Math.max(cursor, phononAudio.currentTime);
+        src.start(cursor); cursor += buf.duration / ttsRate;
+      }
+      await stream.done.catch(() => {});
+      lastEnd = cursor;
+      const waitMs = Math.max(0, (cursor - phononAudio.currentTime) * 1000);
+      await new Promise((r) => setTimeout(r, waitMs + 250));
+      if (run.cancelled) break;
+    }
+  } catch (e) { if (!run.cancelled) console.error(e); }
+}
+
+function stopSpeaking() {
+  speakSeq++;
+  if (speakingRun) { speakingRun.cancelled = true; speakingRun.abort.abort(); }
+  try { speechSynthesis.cancel(); } catch (e) {}
+  activeSources.splice(0).forEach((s) => { try { s.stop(); } catch (e) {} });
+  document.querySelectorAll('.speak-btn.speaking').forEach((b) => {
+    b.classList.remove('speaking'); b.textContent = '🔊 Read aloud'; b.disabled = false;
+  });
+  speakingRun = null;
+}
+
+async function speakReply(text, btn) {
+  if (speakingRun && speakingRun.btn === btn) { stopSpeaking(); return; } // tap again = stop
+  stopSpeaking(); // stop any other reply's speech first
+  const seq = speakSeq;
+  btn.disabled = true; btn.textContent = 'Loading voice…';
+  const engine = await loadPhonon();
+  if (seq !== speakSeq) { btn.disabled = false; btn.textContent = '🔊 Read aloud'; return; } // superseded
+  const run = { cancelled: false, abort: new AbortController(), btn };
+  speakingRun = run;
+  btn.disabled = false; btn.classList.add('speaking'); btn.textContent = '■ Stop';
+  try {
+    if (engine && tts) await speakPhonon(text, run);
+    else await speakDevice(text);
+  } finally {
+    if (speakingRun === run) {
+      btn.classList.remove('speaking'); btn.textContent = '🔊 Read aloud';
+      speakingRun = null;
+    }
+  }
+}
 
 // Load-attempt diagnostics: wllama's progress callback is the only window
 // into the ~0.25 GB download, so remember the last numbers it reported.
@@ -310,6 +434,15 @@ document.getElementById('chatForm').addEventListener('submit', async (e) => {
     meta.className = 'meta';
     meta.textContent = `${tokens} tokens in ${secs.toFixed(1)}s (${(tokens / secs).toFixed(1)} tok/s, CPU/WASM)`;
     outDiv.appendChild(meta);
+    const actions = document.createElement('div');
+    actions.className = 'msg-actions';
+    const speakBtn = document.createElement('button');
+    speakBtn.type = 'button';
+    speakBtn.className = 'speak-btn';
+    speakBtn.textContent = '🔊 Read aloud';
+    speakBtn.addEventListener('click', () => speakReply(raw, speakBtn));
+    actions.appendChild(speakBtn);
+    outDiv.appendChild(actions);
   } catch (err) {
     console.error(err);
     outDiv.textContent = 'Error: ' + (err && err.message ? err.message : err);
