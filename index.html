@@ -40,6 +40,7 @@
   .speak-btn { font-size: 13px; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--gold-soft); color: var(--ink); font-weight: 600; cursor: pointer; }
   .speak-btn:disabled { opacity: .55; cursor: default; }
   .speak-btn.speaking { background: var(--gold); }
+  .speak-btn.voice-on { background: var(--gold); }
   form { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
   input[type=text] { flex: 1 1 auto; font-size: 16px; padding: 10px 12px; border-radius: 11px; border: 1px solid var(--line); background: var(--input-bg); color: var(--ink); outline: none; }
   input[type=text]:focus { border-color: var(--ink-2); box-shadow: 0 0 0 3px rgba(40,83,60,.15); }
@@ -72,6 +73,7 @@
   <span class="badge">CPU only (WASM)</span>
   <span class="badge warn" id="offlineBadge">Online — first run</span>
   <button id="loadBtn">Download model</button>
+  <button id="voiceToggle" type="button" class="speak-btn">🔊 Voice: Off</button>
 </header>
 <div id="status">Model not loaded. Tap “Download model” — one-time download (~0.25 GB), then it runs fully offline.</div>
 <div id="progressWrap"><div id="progressBar"></div></div>
@@ -85,7 +87,7 @@
   <input id="input" type="text" placeholder="Ask anything…" autocomplete="off" disabled>
   <button id="sendBtn" type="submit" disabled>Send</button>
 </form>
-<footer>Model: Gemma 3 270M IT Q4_K_M (~0.25 GB) · Runtime: wllama (llama.cpp compiled to WASM), n_gpu_layers: 0 — WebGPU explicitly off · Model caches in your browser; after the first download, no internet is needed. · Read-aloud voice: Phonon 31M — tap 🔊 on a reply; the voice downloads once, then works offline.</footer>
+<footer>Model: Gemma 3 270M IT Q4_K_M (~0.25 GB) · Runtime: wllama (llama.cpp compiled to WASM), n_gpu_layers: 0 — WebGPU explicitly off · Model caches in your browser; after the first download, no internet is needed. · Read-aloud voice: Phonon 31M — the Voice toggle in the header keeps auto-read on/off; or tap 🔊 on any reply. Voice downloads once, then works offline.</footer>
 
 <script>
 // Surface module-load failures (e.g. a dead CDN import) in the status line
@@ -245,6 +247,32 @@ async function speakReply(text, btn) {
     }
   }
 }
+
+/* ---- Voice on/off toggle: persists, auto-reads every reply when on ---- */
+const voiceToggle = document.getElementById('voiceToggle');
+let voiceAuto = false;
+try { voiceAuto = localStorage.getItem('llmchat.voiceAuto') === 'on'; } catch (e) {}
+function renderVoiceToggle() {
+  voiceToggle.textContent = voiceAuto ? '🔊 Voice: On' : '🔊 Voice: Off';
+  voiceToggle.classList.toggle('voice-on', voiceAuto);
+}
+renderVoiceToggle();
+voiceToggle.addEventListener('click', () => {
+  voiceAuto = !voiceAuto;
+  try { localStorage.setItem('llmchat.voiceAuto', voiceAuto ? 'on' : 'off'); } catch (e) {}
+  renderVoiceToggle();
+  if (voiceAuto) loadPhonon(); // preload so the next reply reads instantly
+  else stopSpeaking();
+});
+// Unlock audio on the first user gesture so auto-read can play later:
+// browsers keep an AudioContext suspended until a gesture resumes it.
+const unlockAudio = () => {
+  if (voiceAuto) { ensurePhononAudio(); loadPhonon(); }
+  window.removeEventListener('pointerdown', unlockAudio);
+  window.removeEventListener('keydown', unlockAudio);
+};
+window.addEventListener('pointerdown', unlockAudio);
+window.addEventListener('keydown', unlockAudio);
 
 // Load-attempt diagnostics: wllama's progress callback is the only window
 // into the ~0.25 GB download, so remember the last numbers it reported.
@@ -443,6 +471,7 @@ document.getElementById('chatForm').addEventListener('submit', async (e) => {
     speakBtn.addEventListener('click', () => speakReply(raw, speakBtn));
     actions.appendChild(speakBtn);
     outDiv.appendChild(actions);
+    if (voiceAuto) speakReply(raw, speakBtn); // Voice on: read every reply aloud
   } catch (err) {
     console.error(err);
     outDiv.textContent = 'Error: ' + (err && err.message ? err.message : err);

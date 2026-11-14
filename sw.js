@@ -1,7 +1,7 @@
 // Service worker: app shell + JS/WASM cached for offline use; pages are
 // network-first so redeploys always reach the user. Model files from
 // Hugging Face are NOT touched here — the ML runtimes own their caches.
-const CACHE = 'offline-llm-v7';
+const CACHE = 'offline-llm-v8';
 const SHELL = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
 
 self.addEventListener('install', (e) => {
