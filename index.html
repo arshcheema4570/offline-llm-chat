@@ -3,117 +3,270 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#173d2b">
-<title>MNN-Pocket 0.3B + Mirage — Offline LLM Chat</title>
+<meta name="theme-color" content="#ffffff">
+<meta name="description" content="On-device LLM chat that runs on CPU (WASM) — no WebGPU, no server, works offline after the first model download.">
+<title>Pocket Chat — Offline LLM</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
-  /* Kheti family visual system: ink / cream / paper / gold */
+  /* Modern minimalist, Kheti family tokens: ink / paper / gold, Georgia display. */
   :root {
-    --ink:#173d2b; --ink-2:#28533c; --cream:#ffffff; --paper:#fffdf8;
-    --gold:#e5a83b; --gold-soft:#f8e7b7; --line:#ded8c9; --muted:#6c766d;
-    --red:#a84e38; --shadow:0 16px 45px rgba(27,52,37,.12);
-    --btn:#173d2b; --user-bg:#173d2b; --input-bg:#fffefa; --track:var(--gold-soft);
-    --badge-bg:#dcead9; --badge-text:#28533c;
-    --shared-blue:#274c77; --shared-blue-2:#6096ba; --shared-gold:#f2c46d;
-    --shared-shadow:0 18px 50px rgba(31,55,90,.16); --shared-ease:cubic-bezier(.23,1,.32,1);
+    --ink:#173d2b; --ink-2:#28533c; --paper:#fffdf8; --bg:#ffffff;
+    --gold:#e5a83b; --gold-soft:#faf3dd; --line:#e8e2d3; --line-soft:#f0ece1;
+    --muted:#7a847b; --text:#1d2b23; --red:#a84e38; --green:#2e7d4f;
+    --radius:18px; --shadow:0 8px 30px rgba(23,61,43,.08);
+    --ease:cubic-bezier(.22,1,.36,1);
     color-scheme: light dark;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--cream); background-image: linear-gradient(125deg, rgba(39,76,119,.05), rgba(96,150,186,.035) 42%, rgba(242,196,109,.06) 100%); background-attachment: fixed; color: var(--ink); font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.45; display: flex; flex-direction: column; height: 100dvh; }
-  /* Shared Kheti family visual system: gradient depth + fluid motion (same block as Kheti Numbers) — kept faint so the page stays mostly white */
-  body::before { content: ""; position: fixed; inset: -20%; z-index: 0; pointer-events: none; background: radial-gradient(circle at 12% 12%, rgba(96,150,186,.07), transparent 28%), radial-gradient(circle at 88% 18%, rgba(242,196,109,.06), transparent 25%), radial-gradient(circle at 72% 90%, rgba(39,76,119,.05), transparent 30%); filter: blur(12px); animation: sharedDrift 18s ease-in-out infinite alternate; }
-  body > * { position: relative; z-index: 1; }
-  header { padding: 14px 16px 10px; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-  .brand { display: flex; align-items: center; gap: 12px; flex: 1 1 auto; min-width: 220px; }
-  .mark { height: 43px; width: 43px; border-radius: 14px; background: var(--gold); display: grid; place-items: center; font-size: 23px; box-shadow: inset 0 -4px 0 rgba(0,0,0,.08); flex: 0 0 auto; }
-  .brand-text strong { display: block; font-family: Georgia, serif; font-size: 20px; letter-spacing: -.01em; }
-  .brand-text span { display: block; color: var(--muted); font-size: 12px; margin-top: 1px; }
-  .badge { font-size: 12px; padding: 3px 8px; border-radius: 999px; background: var(--badge-bg); color: var(--badge-text); font-weight: 600; white-space: nowrap; }
-  .badge.warn { background: var(--gold-soft); color: var(--ink-2); }
-  #status { font-size: 13px; padding: 8px 16px; min-height: 32px; color: var(--ink-2); }
-  #progressWrap { height: 6px; background: var(--track); margin: 0 16px; border-radius: 3px; overflow: hidden; display: none; }
-  #progressBar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--gold), var(--shared-gold)); transition: width .2s; }
-  #errorBox { display: none; margin: 4px 16px 0; padding: 12px 14px; background: var(--paper); border: 1px solid var(--line); border-left: 3px solid var(--red); border-radius: 14px; font-size: 13px; line-height: 1.55; white-space: pre-wrap; color: var(--ink); box-shadow: 0 5px 18px rgba(27,52,37,.04); }
-  #retryRow { display: none; gap: 8px; padding: 10px 16px 0; flex-wrap: wrap; }
-  #chat { flex: 1 1 auto; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-  .msg { max-width: 85%; padding: 10px 14px; border-radius: 18px; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word; font-size: 15px; animation: sharedRise .5s var(--shared-ease) both; }
-  .user { align-self: flex-end; background: var(--user-bg); color: #f6f2e9; border-bottom-right-radius: 4px; }
-  .assistant { align-self: flex-start; background: var(--paper); color: var(--ink); border: 1px solid var(--line); border-bottom-left-radius: 4px; box-shadow: 0 5px 18px rgba(27,52,37,.04); }
-  .meta { font-size: 12px; opacity: .65; margin-top: 4px; }
-  .msg-actions { margin-top: 8px; display: flex; gap: 8px; }
-  .speak-btn { font-size: 13px; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--gold-soft); color: var(--ink); font-weight: 600; cursor: pointer; }
-  .speak-btn:disabled { opacity: .55; cursor: default; }
-  .speak-btn.speaking { background: var(--gold); }
-  .speak-btn.voice-on { background: var(--gold); }
-  .photo-btn { font-size: 15px; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--gold-soft); color: var(--ink); font-weight: 700; cursor: pointer; white-space: nowrap; }
-  .msg img { max-width: 100%; border-radius: 12px; display: block; margin-bottom: 6px; }
-  form { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
-  input[type=text] { flex: 1 1 auto; font-size: 16px; padding: 10px 12px; border-radius: 11px; border: 1px solid var(--line); background: var(--input-bg); color: var(--ink); outline: none; }
-  input[type=text]:focus { border-color: var(--ink-2); box-shadow: 0 0 0 4px rgba(96,150,186,.2) !important; }
-  /* Shared family motion: smooth transitions, hover lift, press, focus ring, rise-in */
-  button, input, select, textarea { transition: transform .18s var(--shared-ease), box-shadow .18s var(--shared-ease), background-color .18s var(--shared-ease), border-color .18s var(--shared-ease), color .18s var(--shared-ease); }
-  button:hover { transform: translateY(-2px); box-shadow: 0 9px 22px rgba(39,76,119,.16); }
-  button:active { transform: translateY(0) scale(.98); }
-  button:disabled:hover { transform: none; box-shadow: none; }
-  header, #status, #chat, form, footer { animation: sharedRise .65s var(--shared-ease) both; }
-  #chat { animation-delay: .05s; }
-  form { animation-delay: .1s; }
-  @keyframes sharedRise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
-  @keyframes sharedDrift { from { transform: translate3d(-1%,0,0) scale(1); } to { transform: translate3d(1.5%,1%,0) scale(1.05); } }
-  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
-  button { font-size: 15px; padding: 10px 16px; border-radius: 12px; border: 0; background: var(--btn); color: #fff; cursor: pointer; font-weight: 700; }
-  button:disabled { opacity: .5; cursor: default; }
-  #retryBtn { background: var(--btn); color: #fff; }
-  #clearBtn { background: var(--gold-soft); color: var(--ink); }
-  footer { font-size: 12px; color: var(--muted); padding: 0 16px 10px; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 15px; line-height: 1.6;
+    display: flex; flex-direction: column; height: 100dvh;
+    -webkit-font-smoothing: antialiased;
+  }
+  button, textarea { font: inherit; }
+  button { cursor: pointer; }
+
+  /* ---- Slim sticky header ---- */
+  header {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
+    padding: 10px 16px; border-bottom: 1px solid var(--line-soft);
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    z-index: 5;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 auto; }
+  .mark {
+    height: 34px; width: 34px; border-radius: 11px; background: var(--gold);
+    display: grid; place-items: center; font-size: 17px; flex: 0 0 auto;
+    box-shadow: inset 0 -3px 0 rgba(0,0,0,.08);
+  }
+  .brand-text { min-width: 0; }
+  .brand-text strong { display: block; font-family: Georgia, serif; font-size: 17px; letter-spacing: -.01em; line-height: 1.15; color: var(--ink); }
+  .brand-text span { display: block; color: var(--muted); font-size: 12px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px; flex: 0 0 auto;
+    font-size: 12px; font-weight: 600; color: var(--ink-2);
+    padding: 6px 11px; border: 1px solid var(--line); border-radius: 999px;
+    background: var(--paper); max-width: 46vw; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--gold); flex: 0 0 auto; }
+  .pill.loading .dot { animation: pulse 1.2s ease-in-out infinite; }
+  .pill.ready .dot { background: var(--green); animation: none; }
+  .pill.error .dot { background: var(--red); animation: none; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+  .icon-btn {
+    flex: 0 0 auto; height: 36px; min-width: 36px; padding: 0 10px;
+    border-radius: 999px; border: 1px solid var(--line); background: var(--paper);
+    color: var(--ink); font-size: 13px; font-weight: 600;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    transition: transform .16s var(--ease), box-shadow .16s var(--ease), background-color .16s var(--ease);
+  }
+  .icon-btn:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
+  .icon-btn:active { transform: translateY(0) scale(.97); }
+  .icon-btn.on { background: var(--gold); border-color: var(--gold); }
+  .icon-btn:disabled { opacity: .5; cursor: default; transform: none; box-shadow: none; }
+
+  /* Thin progress hairline under the header; only visible while loading. */
+  #progressWrap { height: 2px; background: transparent; flex: 0 0 auto; display: none; }
+  #progressBar { height: 100%; width: 0%; background: var(--gold); transition: width .2s var(--ease); }
+
+  /* ---- Chat column ---- */
+  #chat { flex: 1 1 auto; overflow-y: auto; padding: 20px 16px 16px; scroll-behavior: smooth; }
+  .col { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+  .row { display: flex; animation: rise .25s var(--ease) both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .row.user { justify-content: flex-end; }
+  .bubble {
+    max-width: 82%; padding: 10px 15px; border-radius: var(--radius);
+    background: var(--ink); color: #f6f2e9; border-bottom-right-radius: 6px;
+    line-height: 1.55; white-space: pre-wrap; word-wrap: break-word;
+  }
+  .bubble img { max-width: 100%; border-radius: 12px; display: block; margin-bottom: 8px; }
+  .row.assistant { gap: 10px; align-items: flex-start; }
+  .avatar {
+    width: 28px; height: 28px; border-radius: 9px; background: var(--gold);
+    display: grid; place-items: center; font-size: 14px; flex: 0 0 auto; margin-top: 2px;
+    box-shadow: inset 0 -2px 0 rgba(0,0,0,.08);
+  }
+  .assistant-body { min-width: 0; flex: 1 1 auto; padding-top: 3px; }
+  .msg-text { line-height: 1.65; word-wrap: break-word; }
+  .msg-text p { margin: 0 0 10px; } .msg-text p:last-child { margin-bottom: 0; }
+  .msg-text ul { margin: 0 0 10px; padding-left: 20px; } .msg-text li { margin: 3px 0; }
+  .msg-text code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; background: var(--line-soft); padding: 2px 6px; border-radius: 6px; }
+  .msg-text pre { background: var(--line-soft); padding: 12px 14px; border-radius: 12px; overflow-x: auto; margin: 0 0 10px; }
+  .msg-text pre code { background: none; padding: 0; }
+  .caret { display: inline-block; width: 8px; height: 1.05em; background: var(--gold); border-radius: 2px; vertical-align: text-bottom; margin-left: 2px; animation: pulse 1s ease-in-out infinite; }
+  .meta { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .msg-actions { margin-top: 6px; display: flex; gap: 4px; flex-wrap: wrap; }
+  .ghost-btn {
+    font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 999px;
+    border: 1px solid transparent; background: transparent; color: var(--muted);
+    transition: background-color .16s var(--ease), color .16s var(--ease);
+  }
+  .ghost-btn:hover { background: var(--line-soft); color: var(--ink); }
+  .ghost-btn:disabled { opacity: .5; }
+  .ghost-btn.speaking { background: var(--gold-soft); color: var(--ink); }
+
+  /* Error card */
+  #errorBox {
+    display: none; margin: 0 auto 16px; max-width: 720px; padding: 14px 16px;
+    background: var(--paper); border: 1px solid var(--line); border-left: 3px solid var(--red);
+    border-radius: var(--radius); font-size: 13px; line-height: 1.55; white-space: pre-wrap;
+  }
+  #retryRow { display: none; gap: 8px; margin: 0 auto 16px; max-width: 720px; flex-wrap: wrap; }
+  .btn {
+    font-size: 14px; font-weight: 700; padding: 10px 16px; border-radius: 12px;
+    border: 0; background: var(--ink); color: #fff;
+    transition: transform .16s var(--ease), box-shadow .16s var(--ease);
+  }
+  .btn:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
+  .btn:active { transform: translateY(0) scale(.98); }
+  .btn.secondary { background: var(--gold-soft); color: var(--ink); }
+  .btn:disabled { opacity: .5; cursor: default; transform: none; box-shadow: none; }
+
+  /* ---- Empty state ---- */
+  #emptyState { text-align: center; padding: 9vh 12px 0; }
+  #emptyState .mark { height: 56px; width: 56px; border-radius: 18px; font-size: 28px; margin: 0 auto 18px; }
+  #emptyState h1 { font-family: Georgia, serif; font-size: clamp(26px, 5vw, 34px); letter-spacing: -.02em; margin: 0 0 8px; color: var(--ink); font-weight: 600; }
+  #emptyState p { color: var(--muted); margin: 0 auto 22px; max-width: 420px; font-size: 14px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .chip {
+    font-size: 13px; font-weight: 600; padding: 9px 14px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--paper); color: var(--ink);
+    transition: transform .16s var(--ease), box-shadow .16s var(--ease), border-color .16s var(--ease);
+  }
+  .chip:hover { transform: translateY(-1px); box-shadow: var(--shadow); border-color: var(--gold); }
+
+  /* ---- Floating composer ---- */
+  .composer-wrap { flex: 0 0 auto; padding: 8px 16px calc(10px + env(safe-area-inset-bottom)); background: var(--bg); }
+  .composer { max-width: 720px; margin: 0 auto; }
+  form {
+    display: flex; align-items: flex-end; gap: 6px; padding: 8px 8px 8px 12px;
+    border: 1px solid var(--line); border-radius: 24px; background: var(--paper);
+    box-shadow: var(--shadow);
+    transition: border-color .16s var(--ease), box-shadow .16s var(--ease);
+  }
+  form:focus-within { border-color: var(--ink-2); box-shadow: 0 0 0 3px rgba(40,83,60,.1), var(--shadow); }
+  form textarea {
+    flex: 1 1 auto; border: 0; outline: none; resize: none; background: transparent;
+    color: var(--text); font-size: 16px; line-height: 1.5; padding: 7px 2px;
+    max-height: 160px; min-height: 24px;
+  }
+  form textarea::placeholder { color: var(--muted); }
+  form textarea:disabled { opacity: .55; }
+  .composer-btn {
+    flex: 0 0 auto; width: 38px; height: 38px; border-radius: 50%; border: 0;
+    background: transparent; color: var(--ink); font-size: 17px;
+    display: grid; place-items: center;
+    transition: transform .16s var(--ease), background-color .16s var(--ease);
+  }
+  .composer-btn:hover { background: var(--line-soft); }
+  .composer-btn:active { transform: scale(.94); }
+  #sendBtn { background: var(--ink); color: #fff; font-size: 15px; }
+  #sendBtn:hover { background: var(--ink-2); }
+  #sendBtn.stop { background: var(--red); }
+  #sendBtn:disabled { opacity: .4; }
+  .caption { text-align: center; font-size: 11px; color: var(--muted); margin: 8px 0 0; }
+
+  /* Toast (voice / photo notices — never overwrites the model status pill) */
+  #toast {
+    position: fixed; left: 50%; bottom: 96px; transform: translate(-50%, 8px);
+    background: var(--ink); color: #f6f2e9; font-size: 13px; font-weight: 600;
+    padding: 9px 16px; border-radius: 999px; box-shadow: var(--shadow);
+    opacity: 0; pointer-events: none; transition: opacity .2s var(--ease), transform .2s var(--ease);
+    max-width: 88vw; text-align: center; z-index: 10;
+  }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  @media (max-width: 560px) {
+    .brand-text span { display: none; }
+    .pill { max-width: 34vw; }
+    #voiceToggle .lbl { display: none; }
+    #newChatBtn .lbl { display: none; }
+    .bubble { max-width: 88%; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  }
   @media (prefers-color-scheme: dark) {
     :root {
-      --cream:#122019; --paper:#1a2b21; --ink:#e8efe9; --ink-2:#b9d2bd;
-      --line:#2c4636; --muted:#9db3a4; --user-bg:#28533c; --input-bg:#16241c;
-      --track:#2c4636; --badge-bg:#234434; --badge-text:#cfe6d2;
+      --bg:#101a14; --paper:#182720; --ink:#dcead9; --ink-2:#b9d2bd;
+      --text:#e8efe9; --line:#2c4636; --line-soft:#223729; --muted:#9db3a4;
+      --gold-soft:#3d2f10; --green:#7fc89b;
     }
-    .badge.warn { background: #4a3a17; color: #f8e7b7; }
-    #clearBtn { background: #4a3a17; color: #f8e7b7; }
+    .bubble { background: #28533c; }
+    .brand-text strong { color: #e8efe9; }
+    #sendBtn { background: #e5a83b; color: #173d2b; }
+    #sendBtn:hover { background: #f2c46d; }
   }
 </style>
 </head>
 <body>
 <header>
   <div class="brand">
-    <div class="mark">💬</div>
+    <div class="mark" aria-hidden="true">✦</div>
     <div class="brand-text">
-      <strong>MNN-Pocket 0.3B + Mirage — Offline Chat</strong>
-      <span>Chat + vision on your device · no server, no WebGPU</span>
+      <strong>Pocket Chat</strong>
+      <span>MNN-Pocket 0.3B · on-device</span>
     </div>
   </div>
-  <span class="badge">CPU only (WASM)</span>
-  <span class="badge warn" id="offlineBadge">Online — first run</span>
-  <button id="voiceToggle" type="button" class="speak-btn">🔊 Voice: Off</button>
+  <span class="pill loading" id="statusPill" role="status"><span class="dot"></span><span id="statusText">Checking saved model…</span></span>
+  <button id="voiceToggle" type="button" class="icon-btn" title="Read replies aloud (Phonon voice)">🔊 <span class="lbl">Voice</span></button>
+  <button id="newChatBtn" type="button" class="icon-btn" title="Start a new chat">＋ <span class="lbl">New</span></button>
 </header>
-<div id="status">Checking for the saved model…</div>
 <div id="progressWrap"><div id="progressBar"></div></div>
-<div id="errorBox"></div>
-<div id="retryRow">
-  <button id="retryBtn" type="button">Retry download</button>
-  <button id="clearBtn" type="button">Clear cached model &amp; retry</button>
+
+<main id="chat" aria-live="polite">
+  <div class="col" id="chatCol">
+    <div id="errorBox" role="alert"></div>
+    <div id="retryRow">
+      <button id="retryBtn" type="button" class="btn">Retry download</button>
+      <button id="clearBtn" type="button" class="btn secondary">Clear cached model &amp; retry</button>
+    </div>
+    <div id="emptyState">
+      <div class="mark" aria-hidden="true">✦</div>
+      <h1>How can I help?</h1>
+      <p>Runs entirely on your device — no server, no WebGPU. After the first download it works offline.</p>
+      <div class="chips">
+        <button type="button" class="chip" data-prompt="Explain photosynthesis in two short lines.">Explain photosynthesis</button>
+        <button type="button" class="chip" data-prompt="Write a haiku about rain in Punjab.">A haiku about rain</button>
+        <button type="button" class="chip" data-prompt="Give me 3 simple ideas for a healthy vegetarian lunch.">Healthy lunch ideas</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="composer-wrap">
+  <div class="composer">
+    <form id="chatForm">
+      <button id="photoBtn" type="button" class="composer-btn" title="Attach a photo — Mirage describes it, then the chat model answers about it" aria-label="Attach a photo">📷</button>
+      <input id="photoInput" type="file" accept="image/*" hidden>
+      <textarea id="input" rows="1" placeholder="Ask anything…" autocomplete="off" disabled aria-label="Message"></textarea>
+      <button id="sendBtn" type="submit" disabled aria-label="Send">↑</button>
+    </form>
+    <p class="caption">MNN-Pocket 0.3B · Mirage vision · CPU/WASM only · Voice: Phonon 31M</p>
+  </div>
 </div>
-<main id="chat"></main>
-<form id="chatForm">
-  <button id="photoBtn" type="button" class="photo-btn" title="Attach a photo from your library">📷 Photo</button>
-  <input id="photoInput" type="file" accept="image/*" hidden>
-  <input id="input" type="text" placeholder="Ask anything…" autocomplete="off" disabled>
-  <button id="sendBtn" type="submit" disabled>Send</button>
-</form>
-<footer>Model: MNN-Pocket 0.3B Q4_1 (~0.19 GB) · Vision: Mirage 51M (~22 MB, Cactus engine WASM) — attach a photo and the text model answers from Mirage’s structured record · Runtime: wllama (llama.cpp compiled to WASM), n_gpu_layers: 0 — WebGPU explicitly off · Models cache in your browser; after the first download, no internet is needed. · Read-aloud voice: Phonon 31M — the Voice toggle in the header keeps auto-read on/off; or tap 🔊 on any reply. Voice downloads once, then works offline..</footer>
+<div id="toast" role="status"></div>
 
 <script>
-// Surface module-load failures (e.g. a dead CDN import) in the status line
+// Surface module-load failures (e.g. a dead CDN import) in the status pill
 // instead of leaving the page silently stuck.
 window.addEventListener('error', (e) => {
   if (e.target === window && /import|module|wllama/i.test(e.message || '')) {
-    const s = document.getElementById('status');
-    if (s && !window.__wllamaBooted) s.textContent = 'Failed to load the wllama runtime: ' + e.message;
+    // NOTE: setStatus lives in the module script below, not in global scope,
+    // so this classic-script handler must touch the DOM directly.
+    const pill = document.getElementById('statusPill');
+    const s = document.getElementById('statusText');
+    if (s && !window.__wllamaBooted) {
+      s.textContent = 'Failed to load runtime: ' + e.message;
+      if (pill) pill.className = 'pill error';
+    }
   }
 }, true);
 </script>
@@ -128,7 +281,8 @@ const CONFIG_PATHS = {
 
 const MODEL_URL = 'https://huggingface.co/taobao-mnn/MNN-Pocket-0.3B-GGUF/resolve/main/MNN-Pocket-0.3B-Instruct-Q4_1.gguf';
 const MODEL_FILE = MODEL_URL.split('/').pop();
-const statusEl = document.getElementById('status');
+const statusPill = document.getElementById('statusPill');
+const statusText = document.getElementById('statusText');
 const progressWrap = document.getElementById('progressWrap');
 const progressBar = document.getElementById('progressBar');
 const errorBox = document.getElementById('errorBox');
@@ -136,14 +290,146 @@ const retryRow = document.getElementById('retryRow');
 const retryBtn = document.getElementById('retryBtn');
 const clearBtn = document.getElementById('clearBtn');
 const chatEl = document.getElementById('chat');
+const chatCol = document.getElementById('chatCol');
+const emptyState = document.getElementById('emptyState');
 const inputEl = document.getElementById('input');
 const sendBtn = document.getElementById('sendBtn');
-const offlineBadge = document.getElementById('offlineBadge');
+const toastEl = document.getElementById('toast');
 
 let wllama = null;
 let loading = false;
 let generating = false;
+let stopRequested = false;
 const history = [{ role: 'system', content: 'You are a helpful assistant. Keep answers concise.' }];
+
+/* ---- Status pill + toast (separate: voice/photo notices must never
+   overwrite the model status) ---- */
+let toastTimer = null;
+function setStatus(t, kind = 'loading') {
+  statusText.textContent = t;
+  statusPill.title = t;
+  statusPill.className = 'pill ' + kind;
+}
+function showToast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2600);
+}
+
+/* ---- Safe minimal markdown for assistant replies (escape first) ---- */
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function renderMarkdown(text) {
+  const codeBlocks = [];
+  let html = escapeHtml(text);
+  html = html.replace(/```([\s\S]*?)```/g, (_, code) => {
+    codeBlocks.push('<pre><code>' + code.replace(/^\n/, '') + '</code></pre>');
+    return '\u0000' + (codeBlocks.length - 1) + '\u0000';
+  });
+  html = html.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+  const lines = html.split('\n');
+  let out = '', inList = false, para = [];
+  const flushPara = () => { if (para.length) { out += '<p>' + para.join('<br>') + '</p>'; para = []; } };
+  for (const line of lines) {
+    const m = line.match(/^\s*[-•]\s+(.*)$/);
+    if (m) {
+      if (!inList) { flushPara(); out += '<ul>'; inList = true; }
+      out += '<li>' + m[1] + '</li>';
+    } else {
+      if (inList) { out += '</ul>'; inList = false; }
+      if (line.trim() === '') flushPara(); else para.push(line);
+    }
+  }
+  if (inList) out += '</ul>';
+  flushPara();
+  return out.replace(/\u0000(\d+)\u0000/g, (_, i) => codeBlocks[+i] || '');
+}
+
+/* ---- Chat rendering: only autoscroll when the user is already at the bottom ---- */
+function nearBottom() { return chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < 80; }
+function scrollIfNearBottom() { if (nearBottom()) chatEl.scrollTop = chatEl.scrollHeight; }
+function hideEmptyState() { if (emptyState) emptyState.style.display = 'none'; }
+
+function addUserMsg(text) {
+  hideEmptyState();
+  const row = document.createElement('div');
+  row.className = 'row user';
+  const b = document.createElement('div');
+  b.className = 'bubble';
+  b.textContent = text;
+  row.appendChild(b);
+  chatCol.appendChild(row);
+  chatEl.scrollTop = chatEl.scrollHeight;
+  return row;
+}
+function addAssistantMsg(text) {
+  hideEmptyState();
+  const row = document.createElement('div');
+  row.className = 'row assistant';
+  const av = document.createElement('div');
+  av.className = 'avatar'; av.textContent = '✦'; av.setAttribute('aria-hidden', 'true');
+  const body = document.createElement('div');
+  body.className = 'assistant-body';
+  const txt = document.createElement('div');
+  txt.className = 'msg-text';
+  txt.innerHTML = renderMarkdown(text);
+  body.appendChild(txt);
+  row.appendChild(av); row.appendChild(body);
+  chatCol.appendChild(row);
+  chatEl.scrollTop = chatEl.scrollHeight;
+  return { row, body, textEl: txt };
+}
+function attachReplyActions(body, rawText) {
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  body.appendChild(meta);
+  const actions = document.createElement('div');
+  actions.className = 'msg-actions';
+  const copyBtn = document.createElement('button');
+  copyBtn.type = 'button'; copyBtn.className = 'ghost-btn'; copyBtn.textContent = 'Copy';
+  copyBtn.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(rawText); copyBtn.textContent = 'Copied ✓'; }
+    catch (e) { copyBtn.textContent = 'Copy failed'; }
+    setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+  });
+  const speakBtn = document.createElement('button');
+  speakBtn.type = 'button'; speakBtn.className = 'ghost-btn'; speakBtn.textContent = '🔊 Read aloud';
+  speakBtn.addEventListener('click', () => speakReply(rawText, speakBtn));
+  const regenBtn = document.createElement('button');
+  regenBtn.type = 'button'; regenBtn.className = 'ghost-btn'; regenBtn.textContent = '↻ Regenerate';
+  regenBtn.addEventListener('click', () => regenerateLast());
+  actions.append(copyBtn, speakBtn, regenBtn);
+  body.appendChild(actions);
+  return { meta, speakBtn };
+}
+
+/* ---- Chat persistence (text only; photo context is session-only) ---- */
+const SAVED_KEY = 'llmchat.saved.v1';
+let savedMsgs = [];
+try { savedMsgs = JSON.parse(localStorage.getItem(SAVED_KEY) || '[]'); } catch (e) { savedMsgs = []; }
+function saveChat() {
+  try { localStorage.setItem(SAVED_KEY, JSON.stringify(savedMsgs.slice(-40))); } catch (e) {}
+}
+function restoreChat() {
+  if (!savedMsgs.length) return;
+  for (const m of savedMsgs.slice(-40)) {
+    if (m.role === 'user') addUserMsg(m.text);
+    else if (m.role === 'assistant') {
+      const { body } = addAssistantMsg(m.text);
+      attachReplyActions(body, m.text);
+      history.push({ role: 'assistant', content: m.text });
+    }
+  }
+  // Rebuild model history in order (user turns were pushed below in order).
+  const rebuilt = [{ role: 'system', content: history[0].content }];
+  for (const m of savedMsgs.slice(-40)) rebuilt.push({ role: m.role, content: m.text });
+  history.length = 0; history.push(...rebuilt);
+}
+restoreChat();
 
 /* ---- Read aloud: Phonon 31M natural voice (vendored runtime) ---- */
 // Same engine as Mind Gym: PhononTTS.load downloads the voice once and
@@ -153,6 +439,8 @@ const history = [{ role: 'system', content: 'You are a helpful assistant. Keep a
 // phonon-tts resolves its worker + wasm relative to its own files, and
 // same-origin keeps that resolution trivial. If Phonon fails to load, the
 // button falls back to the device voice so it always does something.
+// FIX (Nov 14 redesign): loadPhonon used to call setStatus(), overwriting
+// the model status ("Model ready") with voice chatter. It now only toasts.
 let tts = null, phononVoice = null, phononFailed = false;
 let phononAudio = null, phononGain = null;
 let activeSources = [], lastEnd = 0;
@@ -172,22 +460,20 @@ function ensurePhononAudio() {
 async function loadPhonon() {
   if (tts || phononFailed) return tts;
   ensurePhononAudio();
-  setStatus('Preparing natural voice…');
+  showToast('Preparing natural voice…');
   try {
     const { PhononTTS } = await import('./vendor/phonon-tts/index.js');
     tts = await PhononTTS.load({ lang: 'en', device: 'auto', quant: 'q8',
       onProgress: ({ loaded, total, cached }) => {
-        setStatus(cached ? 'Reading the local voice cache…'
-          : total ? `Preparing natural voice… ${Math.round((loaded / total) * 100)}%`
-          : `Preparing natural voice… ${Math.round(loaded / 1048576)} MB`);
+        if (!cached && total) showToast(`Preparing natural voice… ${Math.round((loaded / total) * 100)}%`);
       } });
     phononVoice = tts.voices[0];
-    setStatus(`Natural voice ready · ${tts.voices.length} voices · offline from now on`);
+    showToast('Natural voice ready · offline from now on');
     return tts;
   } catch (e) {
     console.error('Phonon load failed, falling back to device voice', e);
     phononFailed = true;
-    setStatus('Natural voice unavailable — using the device voice instead.');
+    showToast('Natural voice unavailable — using the device voice.');
     return null;
   }
 }
@@ -207,6 +493,7 @@ function speakDevice(text) {
 
 async function speakPhonon(text, run) {
   ensurePhononAudio();
+  lastEnd = 0; // FIX: was a stale global across runs — old cursor could start playback in the past / overlap the previous reply.
   const parts = text.match(/[^.!?]+[.!?]+["']?|\S[^.!?]*$/g)?.map((s) => s.trim()).filter(Boolean) || [text];
   try {
     for (const part of parts) {
@@ -238,7 +525,10 @@ function stopSpeaking() {
   if (speakingRun) { speakingRun.cancelled = true; speakingRun.abort.abort(); }
   try { speechSynthesis.cancel(); } catch (e) {}
   activeSources.splice(0).forEach((s) => { try { s.stop(); } catch (e) {} });
-  document.querySelectorAll('.speak-btn.speaking').forEach((b) => {
+  // FIX: voiceToggle used to share the .ghost-btn/.speak-btn class, so this
+  // reset could rewrite the header toggle's label. Reply buttons are now
+  // .ghost-btn only; the toggle is .icon-btn and is never touched here.
+  document.querySelectorAll('.ghost-btn.speaking').forEach((b) => {
     b.classList.remove('speaking'); b.textContent = '🔊 Read aloud'; b.disabled = false;
   });
   speakingRun = null;
@@ -270,8 +560,9 @@ const voiceToggle = document.getElementById('voiceToggle');
 let voiceAuto = false;
 try { voiceAuto = localStorage.getItem('llmchat.voiceAuto') === 'on'; } catch (e) {}
 function renderVoiceToggle() {
-  voiceToggle.textContent = voiceAuto ? '🔊 Voice: On' : '🔊 Voice: Off';
-  voiceToggle.classList.toggle('voice-on', voiceAuto);
+  voiceToggle.innerHTML = voiceAuto ? '🔊 <span class="lbl">Voice on</span>' : '🔊 <span class="lbl">Voice</span>';
+  voiceToggle.classList.toggle('on', voiceAuto);
+  voiceToggle.setAttribute('aria-pressed', String(voiceAuto));
 }
 renderVoiceToggle();
 voiceToggle.addEventListener('click', () => {
@@ -291,29 +582,52 @@ const unlockAudio = () => {
 window.addEventListener('pointerdown', unlockAudio);
 window.addEventListener('keydown', unlockAudio);
 
+/* ---- New chat ---- */
+document.getElementById('newChatBtn').addEventListener('click', () => {
+  if (generating) { showToast('Wait for the reply to finish, or stop it first.'); return; }
+  stopSpeaking();
+  stopRequested = false;
+  chatCol.querySelectorAll('.row').forEach((r) => r.remove());
+  history.length = 0;
+  history.push({ role: 'system', content: 'You are a helpful assistant. Keep answers concise.' });
+  savedMsgs = [];
+  saveChat();
+  emptyState.style.display = '';
+  inputEl.focus();
+});
+
+/* ---- Suggestion chips ---- */
+document.querySelectorAll('.chip').forEach((chip) => {
+  chip.addEventListener('click', () => {
+    inputEl.value = chip.dataset.prompt;
+    autoGrow();
+    inputEl.focus();
+    if (!wllama) showToast('Model still loading — your prompt is ready to send.');
+  });
+});
+
+/* ---- Composer: auto-grow textarea, Enter to send ---- */
+function autoGrow() {
+  inputEl.style.height = 'auto';
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 160) + 'px';
+}
+inputEl.addEventListener('input', autoGrow);
+inputEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.getElementById('chatForm').requestSubmit(); }
+});
+
 // Load-attempt diagnostics: wllama's progress callback is the only window
 // into the ~0.19 GB download, so remember the last numbers it reported.
 let lastLoaded = 0;
 let lastTotal = 0;
 let loadStage = 'starting';
 
-function setStatus(t) { statusEl.textContent = t; }
 function fmtMB(n) { return (n / 1048576).toFixed(0) + ' MB'; }
-function addMsg(role, text) {
-  const div = document.createElement('div');
-  div.className = 'msg ' + role;
-  div.textContent = text;
-  chatEl.appendChild(div);
-  chatEl.scrollTop = chatEl.scrollHeight;
-  return div;
-}
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
-if (!navigator.onLine) { offlineBadge.textContent = 'Offline mode'; }
-window.addEventListener('online', () => { offlineBadge.textContent = 'Online — first run'; });
-window.addEventListener('offline', () => { offlineBadge.textContent = 'Offline mode'; });
+if (!navigator.onLine) setStatus('Offline', 'loading');
 
 // wllama 3.8.1 caches the model in OPFS under root 'cache/', keyed as
 // SHA-1(url)_filename, plus a '__metadata__' + key file. A download that
@@ -357,7 +671,7 @@ async function loadModel(opts = {}) {
   lastTotal = 0;
   errorBox.style.display = 'none';
   retryRow.style.display = 'none';
-  setStatus(opts.auto ? 'Loading saved model…' : 'Loading MNN-Pocket 0.3B on CPU (WASM)… first run downloads ~0.19 GB.');
+  setStatus(opts.auto ? 'Loading saved model…' : 'Downloading model…', 'loading');
   progressWrap.style.display = 'block';
   progressBar.style.width = '0%';
   try {
@@ -375,13 +689,12 @@ async function loadModel(opts = {}) {
             ? 'initializing (download done, loading into memory)'
             : 'downloading';
           progressBar.style.width = pct + '%';
-          setStatus(`Downloading model — ${pct}%`);
+          setStatus(`Downloading ${pct}% · ${fmtMB(loaded)} / ${fmtMB(total)}`, 'loading');
         }
       },
     });
     progressWrap.style.display = 'none';
-    setStatus('Model ready — MNN-Pocket 0.3B running fully on CPU (WASM). No WebGPU, no server.');
-    offlineBadge.textContent = 'Ready — works offline';
+    setStatus('Ready · works offline', 'ready');
     inputEl.disabled = false;
     sendBtn.disabled = false;
     inputEl.focus();
@@ -405,7 +718,7 @@ async function loadModel(opts = {}) {
     } else {
       hint = 'What this means: nothing arrived from the model host — check your connection and tap “Retry download”. If it keeps failing at 0%, tap “Clear cached model & retry”.';
     }
-    setStatus('Failed to load model.');
+    setStatus('Failed to load', 'error');
     errorBox.textContent =
       'Couldn’t load the model\n' +
       'Stage: ' + loadStage + '\n' +
@@ -420,17 +733,17 @@ async function loadModel(opts = {}) {
   }
 }
 
-retryBtn.addEventListener('click', loadModel);
+retryBtn.addEventListener('click', () => loadModel());
 clearBtn.addEventListener('click', async () => {
   if (loading) return;
   retryBtn.disabled = true;
   clearBtn.disabled = true;
-  setStatus('Clearing cached model…');
+  setStatus('Clearing cached model…', 'loading');
   try {
     const result = await clearModelCache();
-    setStatus(result + ' Retrying download…');
+    showToast(result);
   } catch (e) {
-    setStatus('Could not clear the cache: ' + (e && e.message ? e.message : e) + ' Retrying anyway…');
+    showToast('Could not clear the cache: ' + (e && e.message ? e.message : e));
   }
   retryBtn.disabled = false;
   clearBtn.disabled = false;
@@ -456,7 +769,7 @@ async function isModelCached() {
     return false;
   }
 }
-setStatus('Checking for the saved model…');
+setStatus('Checking saved model…', 'loading');
 isModelCached().then((cached) => {
   loadModel({ auto: cached });
 }).catch(() => { loadModel(); });
@@ -530,7 +843,7 @@ async function loadMirage() {
   if (mirageReady) return true;
   if (cactusLoading) return cactusLoading;
   cactusLoading = (async () => {
-    setStatus('Loading vision model (Mirage, ~22 MB, one-time)…');
+    showToast('Loading vision model (Mirage, ~22 MB, one-time)…');
     await loadCactusScript();
     cactusModule = await window.createCactus();
     const res = await fetch(MIRAGE_MODEL_URL);
@@ -557,8 +870,34 @@ async function loadMirage() {
 // Decode an image file to RGB bytes (longest side capped at 1024 px —
 // the encoder works on 256 image cells, so more pixels add nothing).
 // imageOrientation 'from-image' honours phone EXIF rotation.
+// FIX: iPhone photos are often HEIC, which createImageBitmap rejects in
+// some browsers — fall back to an <img> decode via object URL.
 async function imageToRGB(file) {
-  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  let bitmap = null;
+  try {
+    bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  } catch (e) {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((resolve, reject) => {
+        const im = new Image();
+        im.onload = () => resolve(im);
+        im.onerror = () => reject(new Error('could not decode this image — try a JPG or PNG'));
+        im.src = url;
+      });
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+      const rgb = new Uint8Array(canvas.width * canvas.height * 3);
+      for (let i = 0, j = 0; i < data.length; i += 4, j += 3) {
+        rgb[j] = data[i]; rgb[j + 1] = data[i + 1]; rgb[j + 2] = data[i + 2];
+      }
+      return { rgb, width: canvas.width, height: canvas.height };
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
   const scale = Math.min(1, 1024 / Math.max(bitmap.width, bitmap.height));
   const w = Math.max(1, Math.round(bitmap.width * scale));
   const h = Math.max(1, Math.round(bitmap.height * scale));
@@ -648,7 +987,7 @@ function summarizeRecord(rec) {
 
 async function describePhoto(file) {
   await loadMirage();
-  setStatus('Mirage is looking at the photo…');
+  showToast('Mirage is looking at the photo…');
   const { rgb, width, height } = await imageToRGB(file);
   const outCap = 262144; // 256 KB JSON buffer
   const rgbPtr = mallocBytes(rgb);
@@ -667,39 +1006,43 @@ async function describePhoto(file) {
 }
 
 function addPhotoMsg(file, caption) {
-  const div = document.createElement('div');
-  div.className = 'msg user';
+  hideEmptyState();
+  const row = document.createElement('div');
+  row.className = 'row user';
+  const b = document.createElement('div');
+  b.className = 'bubble';
   const img = document.createElement('img');
   img.src = URL.createObjectURL(file);
   img.alt = 'Attached photo';
-  div.appendChild(img);
+  b.appendChild(img);
   const cap = document.createElement('div');
   cap.textContent = caption;
-  div.appendChild(cap);
-  chatEl.appendChild(div);
+  b.appendChild(cap);
+  row.appendChild(b);
+  chatCol.appendChild(row);
   chatEl.scrollTop = chatEl.scrollHeight;
-  return div;
+  return row;
 }
 
 async function onPhotoPicked(file) {
   if (!file || !file.type.startsWith('image/') || describing) return;
   describing = true;
-  const prevStatus = statusEl.textContent;
   try {
     const rec = await describePhoto(file);
     const compact = compactMirageRecord(rec);
     const summary = summarizeRecord(rec);
     addPhotoMsg(file, '📷 Photo attached');
-    addMsg('assistant', summary);
+    const { body } = addAssistantMsg(summary);
+    attachReplyActions(body, summary);
     if (compact) {
       history.push({ role: 'system', content: 'The user shared a photo. Mirage (vision model) produced this structured record of it — use ONLY this record to answer questions about the photo; if a detail is not in the record, say you cannot see it:\n' + compact });
     }
-    setStatus('Photo described. Ask anything about it — the text model answers from Mirage’s record.');
-    if (!wllama) setStatus(prevStatus); // model not loaded yet: its loader owns the status line
+    showToast('Photo described. Ask anything about it.');
   } catch (e) {
     console.error('Photo describe failed', e);
-    addMsg('assistant', 'I could not look at that photo: ' + (e && e.message ? e.message : e));
-    setStatus('Vision failed: ' + (e && e.message ? e.message : e));
+    const { body } = addAssistantMsg('I could not look at that photo: ' + (e && e.message ? e.message : e));
+    attachReplyActions(body, 'I could not look at that photo.');
+    showToast('Vision failed: ' + (e && e.message ? e.message : e));
   } finally {
     describing = false;
   }
@@ -710,57 +1053,110 @@ const photoInput = document.getElementById('photoInput');
 photoBtn.addEventListener('click', () => photoInput.click());
 photoInput.addEventListener('change', () => { onPhotoPicked(photoInput.files[0]); photoInput.value = ''; });
 
-document.getElementById('chatForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  if (!wllama || generating) return;
-  const text = inputEl.value.trim();
-  if (!text) return;
-  inputEl.value = '';
-  addMsg('user', text);
-  history.push({ role: 'user', content: text });
+/* ---- Generation (shared by send + regenerate) ---- */
+// FIX: the 0.3B model has a small context window. Sending the whole
+// ever-growing `history` (incl. every photo record) blows it up and makes
+// replies ramble. Only the last 2 photo records + last 6 turns go in.
+function modelMessages() {
+  const sys = history[0];
+  const rest = history.slice(1);
+  const photos = rest.filter((m) => m.role === 'system');
+  const turns = rest.filter((m) => m.role !== 'system').slice(-12);
+  return [sys, ...photos.slice(-2), ...turns];
+}
+
+async function runGeneration(userText) {
   generating = true;
-  sendBtn.disabled = true;
-  const outDiv = addMsg('assistant', '');
+  stopRequested = false;
+  sendBtn.disabled = false; // stays clickable as the Stop button
+  sendBtn.classList.add('stop');
+  sendBtn.textContent = '■';
+  sendBtn.setAttribute('aria-label', 'Stop generating');
+  inputEl.disabled = true;
+  const { row, body, textEl } = addAssistantMsg('');
+  const caret = document.createElement('span');
+  caret.className = 'caret';
   const t0 = performance.now();
   let tokens = 0;
-  // Chat completion using the loaded model's own chat template.
-  // (The old code hand-built one model's prompt format, which other
-  // models don't understand — that's what made MNN-Pocket ramble.)
+  let raw = '';
   try {
     const stream = await wllama.createChatCompletion({
-      messages: history,
+      messages: modelMessages(),
       max_tokens: 512,
       temperature: 0.7,
       stream: true,
     });
-    let raw = '';
     for await (const chunk of stream) {
+      if (stopRequested) break; // breaking the iterator stops consuming; the engine may finish its current step in the background.
       const piece = chunk.choices[0]?.delta?.content ?? chunk.choices[0]?.text ?? '';
-      if (piece) { tokens++; raw += piece; outDiv.textContent = raw; chatEl.scrollTop = chatEl.scrollHeight; }
+      if (piece) {
+        tokens++;
+        raw += piece;
+        textEl.innerHTML = renderMarkdown(raw);
+        textEl.appendChild(caret);
+        scrollIfNearBottom();
+      }
     }
-    history.push({ role: 'assistant', content: raw });
-    const secs = (performance.now() - t0) / 1000;
-    const meta = document.createElement('div');
-    meta.className = 'meta';
-    meta.textContent = `${tokens} tokens in ${secs.toFixed(1)}s (${(tokens / secs).toFixed(1)} tok/s, CPU/WASM)`;
-    outDiv.appendChild(meta);
-    const actions = document.createElement('div');
-    actions.className = 'msg-actions';
-    const speakBtn = document.createElement('button');
-    speakBtn.type = 'button';
-    speakBtn.className = 'speak-btn';
-    speakBtn.textContent = '🔊 Read aloud';
-    speakBtn.addEventListener('click', () => speakReply(raw, speakBtn));
-    actions.appendChild(speakBtn);
-    outDiv.appendChild(actions);
-    if (voiceAuto) speakReply(raw, speakBtn); // Voice on: read every reply aloud
+    if (stopRequested && !raw) raw = 'Stopped.';
+    if (stopRequested && raw && raw !== 'Stopped.') raw += '\n\n*(Stopped.)*';
   } catch (err) {
     console.error(err);
-    outDiv.textContent = 'Error: ' + (err && err.message ? err.message : err);
+    raw = 'Error: ' + (err && err.message ? err.message : err);
   }
+  caret.remove();
+  textEl.innerHTML = renderMarkdown(raw);
+  history.push({ role: 'assistant', content: raw });
+  savedMsgs.push({ role: 'assistant', text: raw });
+  saveChat();
+  const secs = (performance.now() - t0) / 1000;
+  const { meta, speakBtn } = attachReplyActions(body, raw);
+  meta.textContent = stopRequested
+    ? `${tokens} tokens · stopped`
+    : `${tokens} tokens in ${secs.toFixed(1)}s${secs > 0 ? ` (${(tokens / secs).toFixed(1)} tok/s, CPU/WASM)` : ' (CPU/WASM)'}`;
+  if (voiceAuto && !stopRequested) speakReply(raw, speakBtn); // Voice on: read every reply aloud
   generating = false;
+  stopRequested = false;
+  sendBtn.classList.remove('stop');
+  sendBtn.textContent = '↑';
+  sendBtn.setAttribute('aria-label', 'Send');
   sendBtn.disabled = false;
+  inputEl.disabled = false;
   inputEl.focus();
+  scrollIfNearBottom();
+}
+
+async function regenerateLast() {
+  if (!wllama || generating) return;
+  // Find the last user turn, drop the last assistant reply (DOM + history + saved).
+  let lastUserIdx = -1;
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i].role === 'user') { lastUserIdx = i; break; }
+  }
+  if (lastUserIdx < 0) { showToast('Nothing to regenerate yet.'); return; }
+  const userText = history[lastUserIdx].content;
+  const rows = chatCol.querySelectorAll('.row.assistant');
+  if (rows.length) rows[rows.length - 1].remove();
+  history.length = lastUserIdx + 1; // drop the assistant reply after that user turn
+  const savedIdx = savedMsgs.map((m) => m.role).lastIndexOf('assistant');
+  if (savedIdx >= 0) savedMsgs.splice(savedIdx, 1);
+  saveChat();
+  await runGeneration(userText);
+}
+
+document.getElementById('chatForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (generating) { stopRequested = true; return; } // send button is Stop while generating
+  if (!wllama) return;
+  if (describing) { showToast('Still looking at the photo — one moment…'); return; }
+  const text = inputEl.value.trim();
+  if (!text) return;
+  inputEl.value = '';
+  autoGrow();
+  addUserMsg(text);
+  history.push({ role: 'user', content: text });
+  savedMsgs.push({ role: 'user', text });
+  saveChat();
+  await runGeneration(text);
 });
 </script>
 </body>
