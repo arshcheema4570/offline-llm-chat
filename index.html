@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#173d2b">
-<title>Gemma 3 270M — Offline LLM Chat</title>
+<title>MNN-Pocket 0.3B — Offline LLM Chat</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
@@ -66,7 +66,7 @@
   <div class="brand">
     <div class="mark">💬</div>
     <div class="brand-text">
-      <strong>Gemma 3 270M — Offline Chat</strong>
+      <strong>MNN-Pocket 0.3B — Offline Chat</strong>
       <span>Runs on your device · no server, no WebGPU</span>
     </div>
   </div>
@@ -87,7 +87,7 @@
   <input id="input" type="text" placeholder="Ask anything…" autocomplete="off" disabled>
   <button id="sendBtn" type="submit" disabled>Send</button>
 </form>
-<footer>Model: Gemma 3 270M IT Q4_K_M (~0.25 GB) · Runtime: wllama (llama.cpp compiled to WASM), n_gpu_layers: 0 — WebGPU explicitly off · Model caches in your browser; after the first download, no internet is needed. · Read-aloud voice: Phonon 31M — the Voice toggle in the header keeps auto-read on/off; or tap 🔊 on any reply. Voice downloads once, then works offline.</footer>
+<footer>Model: MNN-Pocket 0.3B Q4_1 (~0.19 GB) · Runtime: wllama (llama.cpp compiled to WASM), n_gpu_layers: 0 — WebGPU explicitly off · Model caches in your browser; after the first download, no internet is needed. · Read-aloud voice: Phonon 31M — the Voice toggle in the header keeps auto-read on/off; or tap 🔊 on any reply. Voice downloads once, then works offline.</footer>
 
 <script>
 // Surface module-load failures (e.g. a dead CDN import) in the status line
@@ -108,7 +108,7 @@ const CONFIG_PATHS = {
   default: 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.8.1/src/wasm/wllama.wasm',
 };
 
-const MODEL_URL = 'https://huggingface.co/unsloth/gemma-3-270m-it-GGUF/resolve/main/gemma-3-270m-it-Q4_K_M.gguf';
+const MODEL_URL = 'https://huggingface.co/taobao-mnn/MNN-Pocket-0.3B-GGUF/resolve/main/MNN-Pocket-0.3B-Instruct-Q4_1.gguf';
 const MODEL_FILE = MODEL_URL.split('/').pop();
 const statusEl = document.getElementById('status');
 const progressWrap = document.getElementById('progressWrap');
@@ -342,7 +342,7 @@ async function loadModel(opts = {}) {
   retryRow.style.display = 'none';
   loadBtn.disabled = true;
   loadBtn.textContent = opts.auto ? 'Loading…' : 'Downloading…';
-  setStatus(opts.auto ? 'Loading saved model…' : 'Loading Gemma 3 270M on CPU (WASM)… first run downloads ~0.25 GB.');
+  setStatus(opts.auto ? 'Loading saved model…' : 'Loading MNN-Pocket 0.3B on CPU (WASM)… first run downloads ~0.19 GB.');
   progressWrap.style.display = 'block';
   progressBar.style.width = '0%';
   try {
@@ -365,7 +365,7 @@ async function loadModel(opts = {}) {
       },
     });
     progressWrap.style.display = 'none';
-    setStatus('Model ready — Gemma 3 270M running fully on CPU (WASM). No WebGPU, no server.');
+    setStatus('Model ready — MNN-Pocket 0.3B running fully on CPU (WASM). No WebGPU, no server.');
     offlineBadge.textContent = 'Ready — works offline';
     inputEl.disabled = false;
     sendBtn.disabled = false;
@@ -447,7 +447,7 @@ async function isModelCached() {
 setStatus('Checking for the saved model…');
 isModelCached().then((cached) => {
   if (cached) loadModel({ auto: true });
-  else setStatus('Model not loaded. Tap “Download model” — one-time download (~0.25 GB), then it runs fully offline.');
+  else setStatus('Model not loaded. Tap “Download model” — one-time download (~0.19 GB), then it runs fully offline.');
 }).catch(() => {});
 
 document.getElementById('chatForm').addEventListener('submit', async (e) => {
@@ -463,21 +463,19 @@ document.getElementById('chatForm').addEventListener('submit', async (e) => {
   const outDiv = addMsg('assistant', '');
   const t0 = performance.now();
   let tokens = 0;
-  // Raw completion with a hand-built prompt in Gemma's native format.
-  // This avoids any chat-template channel quirks in the runtime's chat API.
-  const prompt = history.map(m =>
-    `<start_of_turn>${m.role === 'assistant' ? 'model' : 'user'}\n${m.content}<end_of_turn>\n`
-  ).join('') + '<start_of_turn>model\n';
+  // Chat completion using the loaded model's own chat template.
+  // (The old code hand-built one model's prompt format, which other
+  // models don't understand — that's what made MNN-Pocket ramble.)
   try {
-    const stream = await wllama.createCompletion({
-      prompt,
+    const stream = await wllama.createChatCompletion({
+      messages: history,
       max_tokens: 512,
       temperature: 0.7,
       stream: true,
     });
     let raw = '';
     for await (const chunk of stream) {
-      const piece = chunk.choices[0]?.text ?? '';
+      const piece = chunk.choices[0]?.delta?.content ?? chunk.choices[0]?.text ?? '';
       if (piece) { tokens++; raw += piece; outDiv.textContent = raw; chatEl.scrollTop = chatEl.scrollHeight; }
     }
     history.push({ role: 'assistant', content: raw });
