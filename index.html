@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#173d2b">
-<title>MNN-Pocket 0.3B — Offline LLM Chat</title>
+<title>MNN-Pocket 0.3B + Mirage — Offline LLM Chat</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
@@ -41,6 +41,8 @@
   .speak-btn:disabled { opacity: .55; cursor: default; }
   .speak-btn.speaking { background: var(--gold); }
   .speak-btn.voice-on { background: var(--gold); }
+  .photo-btn { font-size: 15px; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--gold-soft); color: var(--ink); font-weight: 700; cursor: pointer; white-space: nowrap; }
+  .msg img { max-width: 100%; border-radius: 12px; display: block; margin-bottom: 6px; }
   form { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
   input[type=text] { flex: 1 1 auto; font-size: 16px; padding: 10px 12px; border-radius: 11px; border: 1px solid var(--line); background: var(--input-bg); color: var(--ink); outline: none; }
   input[type=text]:focus { border-color: var(--ink-2); box-shadow: 0 0 0 3px rgba(40,83,60,.15); }
@@ -66,8 +68,8 @@
   <div class="brand">
     <div class="mark">💬</div>
     <div class="brand-text">
-      <strong>MNN-Pocket 0.3B — Offline Chat</strong>
-      <span>Runs on your device · no server, no WebGPU</span>
+      <strong>MNN-Pocket 0.3B + Mirage — Offline Chat</strong>
+      <span>Chat + vision on your device · no server, no WebGPU</span>
     </div>
   </div>
   <span class="badge">CPU only (WASM)</span>
@@ -75,7 +77,7 @@
   <button id="loadBtn">Download model</button>
   <button id="voiceToggle" type="button" class="speak-btn">🔊 Voice: Off</button>
 </header>
-<div id="status">Model not loaded. Tap “Download model” — one-time download (~0.25 GB), then it runs fully offline.</div>
+<div id="status">Model not loaded. Tap “Download model” — one-time download (~0.19 GB), then it runs fully offline.</div>
 <div id="progressWrap"><div id="progressBar"></div></div>
 <div id="errorBox"></div>
 <div id="retryRow">
@@ -84,10 +86,14 @@
 </div>
 <main id="chat"></main>
 <form id="chatForm">
+  <button id="photoBtn" type="button" class="photo-btn" title="Attach a photo from your library">📷 Photo</button>
+  <button id="cameraBtn" type="button" class="photo-btn" title="Take a photo with the camera">📸 Camera</button>
+  <input id="photoInput" type="file" accept="image/*" hidden>
+  <input id="cameraInput" type="file" accept="image/*" capture="environment" hidden>
   <input id="input" type="text" placeholder="Ask anything…" autocomplete="off" disabled>
   <button id="sendBtn" type="submit" disabled>Send</button>
 </form>
-<footer>Model: MNN-Pocket 0.3B Q4_1 (~0.19 GB) · Runtime: wllama (llama.cpp compiled to WASM), n_gpu_layers: 0 — WebGPU explicitly off · Model caches in your browser; after the first download, no internet is needed. · Read-aloud voice: Phonon 31M — the Voice toggle in the header keeps auto-read on/off; or tap 🔊 on any reply. Voice downloads once, then works offline.</footer>
+<footer>Model: MNN-Pocket 0.3B Q4_1 (~0.19 GB) · Vision: Mirage 51M (~22 MB, Cactus engine WASM) — attach a photo and the text model answers from Mirage’s structured record · Runtime: wllama (llama.cpp compiled to WASM), n_gpu_layers: 0 — WebGPU explicitly off · Models cache in your browser; after the first download, no internet is needed. · Read-aloud voice: Phonon 31M — the Voice toggle in the header keeps auto-read on/off; or tap 🔊 on any reply. Voice downloads once, then works offline..</footer>
 
 <script>
 // Surface module-load failures (e.g. a dead CDN import) in the status line
@@ -275,7 +281,7 @@ window.addEventListener('pointerdown', unlockAudio);
 window.addEventListener('keydown', unlockAudio);
 
 // Load-attempt diagnostics: wllama's progress callback is the only window
-// into the ~0.25 GB download, so remember the last numbers it reported.
+// into the ~0.19 GB download, so remember the last numbers it reported.
 let lastLoaded = 0;
 let lastTotal = 0;
 let loadStage = 'starting';
@@ -385,7 +391,7 @@ async function loadModel(opts = {}) {
       : (lastLoaded ? `Downloaded: ${fmtMB(lastLoaded)} (total size unknown)` : 'Downloaded: nothing arrived');
     let hint;
     if (lastLoaded > 0 && lastTotal && lastLoaded < lastTotal) {
-      hint = 'What this means: the download stopped part-way — the connection dropped before the 0.25 GB file finished. The model file itself is fine; this is the mobile network. Tap “Retry download” — it starts again from the beginning, so Wi-Fi or a stronger signal helps.';
+      hint = 'What this means: the download stopped part-way — the connection dropped before the 0.19 GB file finished. The model file itself is fine; this is the mobile network. Tap “Retry download” — it starts again from the beginning, so Wi-Fi or a stronger signal helps.';
     } else if (lastLoaded >= lastTotal && lastTotal > 0) {
       hint = 'What this means: the download finished, but the model would not start in memory — the saved copy may be damaged. Tap “Clear cached model & retry”: it wipes the saved copy and downloads fresh.';
     } else {
@@ -428,7 +434,7 @@ clearBtn.addEventListener('click', async () => {
 
 // Auto-load on startup when the model is already cached, so there's no
 // tap: open the app and just type. First run (nothing cached) keeps the
-// Download button, so the ~0.25 GB download never starts unasked.
+// Download button, so the ~0.19 GB download never starts unasked.
 // Both OPFS entries = a completed download; a partial download leaves
 // the file without its metadata entry, so it falls back to the button.
 async function isModelCached() {
@@ -449,6 +455,259 @@ isModelCached().then((cached) => {
   if (cached) loadModel({ auto: true });
   else setStatus('Model not loaded. Tap “Download model” — one-time download (~0.19 GB), then it runs fully offline.');
 }).catch(() => {});
+
+/* ---- Vision: Mirage 51M (Cactus engine, WASM) ---- */
+// Mirage is NOT a GGUF model, so it cannot run in wllama. It runs on the
+// Cactus engine (vendor/cactus/cactus.js + cactus.wasm, Apache 2.0 — see
+// vendor/cactus/LICENSE-CACTUS.txt), which is a single-threaded WASM
+// build: no SharedArrayBuffer, no Atomics, no pthreads, so it needs no
+// COOP/COEP headers and works on plain GitHub Pages. The engine is loaded
+// lazily on the first photo attach; mirage.cact (~22 MB) is fetched from
+// this same origin and the service worker caches it, so vision works
+// offline after the first use. describe() takes raw RGB pixels and
+// returns a JSON record (scene, objects, OCR text, relations). That record
+// is compacted to plain text and added to the chat history as a system
+// message, so the MNN text model can answer questions about the photo
+// without ever seeing pixels.
+const MIRAGE_MODEL_URL = 'vendor/cactus/mirage.cact';
+let cactusModule = null, cactusLoading = null, mirageReady = false, describing = false;
+
+function loadCactusScript() {
+  return new Promise((resolve, reject) => {
+    if (window.createCactus) return resolve();
+    // Classic script tag (not a module): cactus.js is UMD and declares
+    // `var createCactus` at top level, which lands on window. It also
+    // resolves cactus.wasm relative to its own URL (vendor/cactus/).
+    const s = document.createElement('script');
+    s.src = 'vendor/cactus/cactus.js';
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('could not load vendor/cactus/cactus.js'));
+    document.head.appendChild(s);
+  });
+}
+
+function cactusError() {
+  try {
+    const p = cactusModule && cactusModule._cactus_last_error && cactusModule._cactus_last_error();
+    return p ? readUtf8(p) : '';
+  } catch (e) { return ''; }
+}
+
+// Plain-JS UTF-8 helpers: cactus.js does not export Emscripten's
+// lengthBytesUTF8/stringToUTF8/UTF8ToString runtime methods, so work
+// directly against HEAPU8 with TextEncoder/TextDecoder instead.
+const utf8Encoder = new TextEncoder();
+const utf8Decoder = new TextDecoder();
+function readUtf8(ptr) {
+  if (!ptr) return '';
+  const heap = cactusModule.HEAPU8;
+  let end = ptr;
+  while (heap[end] !== 0) end++;
+  return utf8Decoder.decode(heap.subarray(ptr, end));
+}
+
+function mallocBytes(bytes) {
+  const ptr = cactusModule._malloc(bytes.length);
+  if (!ptr) throw new Error('out of memory in the vision engine');
+  cactusModule.HEAPU8.set(bytes, ptr);
+  return ptr;
+}
+function mallocString(str) {
+  const bytes = utf8Encoder.encode(str);
+  const ptr = cactusModule._malloc(bytes.length + 1);
+  if (!ptr) throw new Error('out of memory in the vision engine');
+  cactusModule.HEAPU8.set(bytes, ptr);
+  cactusModule.HEAPU8[ptr + bytes.length] = 0;
+  return ptr;
+}
+
+async function loadMirage() {
+  if (mirageReady) return true;
+  if (cactusLoading) return cactusLoading;
+  cactusLoading = (async () => {
+    setStatus('Loading vision model (Mirage, ~22 MB, one-time)…');
+    await loadCactusScript();
+    cactusModule = await window.createCactus();
+    const res = await fetch(MIRAGE_MODEL_URL);
+    if (!res.ok) throw new Error('could not fetch ' + MIRAGE_MODEL_URL + ' (HTTP ' + res.status + ')');
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    const ptr = mallocBytes(bytes);
+    try {
+      const rc = cactusModule._cactus_load(ptr, BigInt(bytes.length)); // size is unsigned long long (i64) in cactus.h — Emscripten needs a BigInt
+      if (rc < 0) throw new Error('cactus_load failed: ' + cactusError());
+      if ((cactusModule._cactus_models() & 4) === 0) throw new Error('Mirage did not register as a vision model');
+    } finally {
+      cactusModule._free(ptr);
+    }
+    mirageReady = true;
+    return true;
+  })().catch((e) => {
+    cactusLoading = null;
+    console.error('Mirage load failed', e);
+    throw e;
+  });
+  return cactusLoading;
+}
+
+// Decode an image file to RGB bytes (longest side capped at 1024 px —
+// the encoder works on 256 image cells, so more pixels add nothing).
+// imageOrientation 'from-image' honours phone EXIF rotation.
+async function imageToRGB(file) {
+  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  const scale = Math.min(1, 1024 / Math.max(bitmap.width, bitmap.height));
+  const w = Math.max(1, Math.round(bitmap.width * scale));
+  const h = Math.max(1, Math.round(bitmap.height * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  const data = ctx.getImageData(0, 0, w, h).data;
+  const rgb = new Uint8Array(w * h * 3);
+  for (let i = 0, j = 0; i < data.length; i += 4, j += 3) {
+    rgb[j] = data[i]; rgb[j + 1] = data[i + 1]; rgb[j + 2] = data[i + 2];
+  }
+  bitmap.close();
+  return { rgb, width: w, height: h };
+}
+
+// Compact the Mirage JSON to short plain text: masks and the reasoning
+// trace are dropped (the trace showed no VQA benefit in Cactus's own
+// test), objects capped at 15, text lines at 10, relations at 10.
+function compactMirageRecord(rec) {
+  const lines = [];
+  // Real schema (verified by running describe() locally, Nov 14):
+  // scene is an OBJECT {background, style, ...}, NOT a string.
+  const sc = rec.scene;
+  if (sc && typeof sc === 'object') {
+    const bits = Object.values(sc).filter((v) => typeof v === 'string' && v.trim());
+    if (bits.length) lines.push('Scene: ' + bits.join(', '));
+  } else if (typeof sc === 'string' && sc.trim()) lines.push('Scene: ' + sc.trim());
+  const allObjs = Array.isArray(rec.objects) ? rec.objects : [];
+  const byId = {};
+  allObjs.forEach((o) => { if (o && o.id != null) byId[o.id] = o; });
+  const objs = allObjs.slice(0, 15);
+  if (objs.length) {
+    lines.push('Objects: ' + objs.map((o) => {
+      const name = o.name || o.label || 'thing';
+      // description is an OBJECT {color, shape, content, direction, ...}
+      const d = (o.description && typeof o.description === 'object') ? o.description : {};
+      const attrs = [d.color, d.material, d.shape, d.direction, d.content]
+        .filter((v) => typeof v === 'string' && v.trim()).join(', ');
+      const b = o.bbox || o.box;
+      const box = Array.isArray(b) ? ' [' + b.map((v) => Math.round(v)).join(',') + ']' : '';
+      const pos = (typeof o.position === 'string' && o.position) ? ' at ' + o.position : '';
+      return name + (attrs ? ' (' + attrs + ')' : '') + box + pos;
+    }).join('; '));
+  }
+  const texts = [];
+  const pushText = (t) => {
+    if (typeof t === 'string' && t.trim()) texts.push(t.trim());
+    // OCR entries use `string`, not `text`
+    else if (t && typeof t.string === 'string' && t.string.trim()) texts.push(t.string.trim());
+    else if (t && typeof t.text === 'string' && t.text.trim()) texts.push(t.text.trim());
+  };
+  if (Array.isArray(rec.text)) rec.text.forEach(pushText);
+  if (Array.isArray(rec.text_lines)) rec.text_lines.forEach(pushText);
+  if (typeof rec.text === 'string') pushText(rec.text);
+  if (texts.length) lines.push('Text in image: ' + texts.slice(0, 10).map((t) => '"' + t + '"').join(', '));
+  // Relations reference objects by numeric id — resolve to names.
+  const rels = Array.isArray(rec.relations) ? rec.relations.slice(0, 10) : [];
+  if (rels.length) {
+    lines.push('Relations: ' + rels.map((r) => {
+      if (typeof r === 'string') return r;
+      const sName = (r.subject != null && byId[r.subject]) ? (byId[r.subject].name || 'thing') : r.subject;
+      const oName = (r.object != null && byId[r.object]) ? (byId[r.object].name || 'thing') : r.object;
+      return [sName, r.predicate || r.relation, oName].filter((v) => v != null && v !== '').join(' ');
+    }).join('; '));
+  }
+  return lines.join('\n');
+}
+
+// Short spoken-style summary of the record for the chat bubble.
+function summarizeRecord(rec) {
+  const objs = Array.isArray(rec.objects) ? rec.objects : [];
+  const bits = objs.slice(0, 8).map((o) => {
+    const d = (o.description && typeof o.description === 'object') ? o.description : {};
+    const label = [d.color, o.name].filter((v) => typeof v === 'string' && v.trim()).join(' ');
+    return label || (o.name || 'thing');
+  });
+  const texts = [];
+  if (Array.isArray(rec.text)) rec.text.forEach((t) => {
+    if (t && typeof t.string === 'string' && t.string.trim()) texts.push(t.string.trim());
+  });
+  texts.slice(0, 3).forEach((t) => bits.push('text reading "' + t + '"'));
+  return bits.length
+    ? 'I see ' + bits.join(', ') + '.'
+    : 'I looked at the photo but could not describe it.';
+}
+
+async function describePhoto(file) {
+  await loadMirage();
+  setStatus('Mirage is looking at the photo…');
+  const { rgb, width, height } = await imageToRGB(file);
+  const outCap = 262144; // 256 KB JSON buffer
+  const rgbPtr = mallocBytes(rgb);
+  const optPtr = mallocString('{}'); // defaults: full record (scene, objects, text, relations)
+  const langPtr = mallocString('en');
+  const outPtr = cactusModule._malloc(outCap);
+  if (!outPtr) throw new Error('out of memory in the vision engine');
+  try {
+    const rc = cactusModule._cactus_describe(rgbPtr, width, height, optPtr, langPtr, 0, outPtr, outCap);
+    if (rc < 0) throw new Error('cactus_describe failed: ' + cactusError());
+    return JSON.parse(readUtf8(outPtr));
+  } finally {
+    cactusModule._free(rgbPtr); cactusModule._free(optPtr);
+    cactusModule._free(langPtr); cactusModule._free(outPtr);
+  }
+}
+
+function addPhotoMsg(file, caption) {
+  const div = document.createElement('div');
+  div.className = 'msg user';
+  const img = document.createElement('img');
+  img.src = URL.createObjectURL(file);
+  img.alt = 'Attached photo';
+  div.appendChild(img);
+  const cap = document.createElement('div');
+  cap.textContent = caption;
+  div.appendChild(cap);
+  chatEl.appendChild(div);
+  chatEl.scrollTop = chatEl.scrollHeight;
+  return div;
+}
+
+async function onPhotoPicked(file) {
+  if (!file || !file.type.startsWith('image/') || describing) return;
+  describing = true;
+  const prevStatus = statusEl.textContent;
+  try {
+    const rec = await describePhoto(file);
+    const compact = compactMirageRecord(rec);
+    const summary = summarizeRecord(rec);
+    addPhotoMsg(file, '📷 Photo attached');
+    addMsg('assistant', summary);
+    if (compact) {
+      history.push({ role: 'system', content: 'The user shared a photo. Mirage (vision model) produced this structured record of it — use ONLY this record to answer questions about the photo; if a detail is not in the record, say you cannot see it:\n' + compact });
+    }
+    setStatus('Photo described. Ask anything about it — the text model answers from Mirage’s record.');
+    if (!wllama) setStatus(prevStatus); // model not loaded yet: its loader owns the status line
+  } catch (e) {
+    console.error('Photo describe failed', e);
+    addMsg('assistant', 'I could not look at that photo: ' + (e && e.message ? e.message : e));
+    setStatus('Vision failed: ' + (e && e.message ? e.message : e));
+  } finally {
+    describing = false;
+  }
+}
+
+const photoBtn = document.getElementById('photoBtn');
+const cameraBtn = document.getElementById('cameraBtn');
+const photoInput = document.getElementById('photoInput');
+const cameraInput = document.getElementById('cameraInput');
+photoBtn.addEventListener('click', () => photoInput.click());
+cameraBtn.addEventListener('click', () => cameraInput.click());
+photoInput.addEventListener('change', () => { onPhotoPicked(photoInput.files[0]); photoInput.value = ''; });
+cameraInput.addEventListener('change', () => { onPhotoPicked(cameraInput.files[0]); cameraInput.value = ''; });
 
 document.getElementById('chatForm').addEventListener('submit', async (e) => {
   e.preventDefault();
