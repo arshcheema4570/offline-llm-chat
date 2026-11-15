@@ -48,7 +48,6 @@
   input[type=text]:focus { border-color: var(--ink-2); box-shadow: 0 0 0 3px rgba(40,83,60,.15); }
   button { font-size: 15px; padding: 10px 16px; border-radius: 12px; border: 0; background: var(--btn); color: #fff; cursor: pointer; font-weight: 700; }
   button:disabled { opacity: .5; cursor: default; }
-  #loadBtn { background: var(--gold); color: var(--ink); }
   #retryBtn { background: var(--btn); color: #fff; }
   #clearBtn { background: var(--gold-soft); color: var(--ink); }
   footer { font-size: 12px; color: var(--muted); padding: 0 16px 10px; }
@@ -74,10 +73,9 @@
   </div>
   <span class="badge">CPU only (WASM)</span>
   <span class="badge warn" id="offlineBadge">Online — first run</span>
-  <button id="loadBtn">Download model</button>
   <button id="voiceToggle" type="button" class="speak-btn">🔊 Voice: Off</button>
 </header>
-<div id="status">Model not loaded. Tap “Download model” — one-time download (~0.19 GB), then it runs fully offline.</div>
+<div id="status">Checking for the saved model…</div>
 <div id="progressWrap"><div id="progressBar"></div></div>
 <div id="errorBox"></div>
 <div id="retryRow">
@@ -97,7 +95,7 @@
 
 <script>
 // Surface module-load failures (e.g. a dead CDN import) in the status line
-// instead of leaving the Download button silently dead.
+// instead of leaving the page silently stuck.
 window.addEventListener('error', (e) => {
   if (e.target === window && /import|module|wllama/i.test(e.message || '')) {
     const s = document.getElementById('status');
@@ -126,7 +124,6 @@ const clearBtn = document.getElementById('clearBtn');
 const chatEl = document.getElementById('chat');
 const inputEl = document.getElementById('input');
 const sendBtn = document.getElementById('sendBtn');
-const loadBtn = document.getElementById('loadBtn');
 const offlineBadge = document.getElementById('offlineBadge');
 
 let wllama = null;
@@ -346,8 +343,6 @@ async function loadModel(opts = {}) {
   lastTotal = 0;
   errorBox.style.display = 'none';
   retryRow.style.display = 'none';
-  loadBtn.disabled = true;
-  loadBtn.textContent = opts.auto ? 'Loading…' : 'Downloading…';
   setStatus(opts.auto ? 'Loading saved model…' : 'Loading MNN-Pocket 0.3B on CPU (WASM)… first run downloads ~0.19 GB.');
   progressWrap.style.display = 'block';
   progressBar.style.width = '0%';
@@ -375,7 +370,6 @@ async function loadModel(opts = {}) {
     offlineBadge.textContent = 'Ready — works offline';
     inputEl.disabled = false;
     sendBtn.disabled = false;
-    loadBtn.textContent = 'Model loaded';
     inputEl.focus();
   } catch (err) {
     // The old code left `wllama` assigned after a failure, which made the
@@ -407,14 +401,11 @@ async function loadModel(opts = {}) {
       hint;
     errorBox.style.display = 'block';
     retryRow.style.display = 'flex';
-    loadBtn.disabled = false;
-    loadBtn.textContent = 'Retry download';
   } finally {
     loading = false;
   }
 }
 
-loadBtn.addEventListener('click', loadModel);
 retryBtn.addEventListener('click', loadModel);
 clearBtn.addEventListener('click', async () => {
   if (loading) return;
@@ -432,11 +423,12 @@ clearBtn.addEventListener('click', async () => {
   loadModel();
 });
 
-// Auto-load on startup when the model is already cached, so there's no
-// tap: open the app and just type. First run (nothing cached) keeps the
-// Download button, so the ~0.19 GB download never starts unasked.
-// Both OPFS entries = a completed download; a partial download leaves
-// the file without its metadata entry, so it falls back to the button.
+// Fully automatic on startup: if the model is cached, load it; if not,
+// download it right away — no tap anywhere. The ~0.19 GB download starts
+// on its own the first time the app opens. Both OPFS entries = a completed
+// download; a partial download leaves the file without its metadata entry,
+// so it re-downloads automatically too. If a download fails, the Retry
+// buttons appear.
 async function isModelCached() {
   if (!navigator.storage || !navigator.storage.getDirectory) return false;
   try {
@@ -452,9 +444,8 @@ async function isModelCached() {
 }
 setStatus('Checking for the saved model…');
 isModelCached().then((cached) => {
-  if (cached) loadModel({ auto: true });
-  else setStatus('Model not loaded. Tap “Download model” — one-time download (~0.19 GB), then it runs fully offline.');
-}).catch(() => {});
+  loadModel({ auto: cached });
+}).catch(() => { loadModel(); });
 
 /* ---- Vision: Mirage 51M (Cactus engine, WASM) ---- */
 // Mirage is NOT a GGUF model, so it cannot run in wllama. It runs on the
